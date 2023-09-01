@@ -40,9 +40,9 @@ class polyFT:
 		at 2D positions in Fourier space specified by the W matrix
 		'''
 
-		den_weight = (W*self.Alpha).sum(-1) * (W*self.Alpha_m1).sum(-1)
-		phase = np.exp(2j*np.pi*(W*self.Gamma).sum(-1))
-		return (phase * self.num_weight/self.den_weight).sum()
+		den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T)
+		phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
+		return (phase * self.num_weight[None,:]/den_weight).sum(-1)
 
 
 
