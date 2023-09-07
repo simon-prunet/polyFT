@@ -68,3 +68,14 @@ def hexagon_transform(W,R=1.0):
 	s3 = np.sqrt(3.)
 	calc = -4*s3/(u+s3*v)/(u-s3*v)*np.cos(u*R) + 2.*s3/u/(u+s3*v)*np.cos(0.5*u*R-s3/2.*v*R) + 2.*s3/u/(u-s3*v)*np.cos(u/2*R+s3/2*v*R)
 	return(calc)
+
+def compute_W_array(n=1024):
+	'''
+	computes 2D coordinates of spatial frequencies as a list of 2D vectors
+	'''
+	f = np.fft.fftshift(np.fft.fftfreq(n))
+	fxx,fyy = np.meshgrid(f,f)
+	W = np.vstack((fxx.flatten(),fyy.flatten())).T
+	return(W)
+
+
