@@ -40,7 +40,10 @@ class polyFT:
 		at 2D positions in Fourier space specified by the W matrix
 		'''
 
-		den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T)
+		# Beware that W are wave vectors in the paper, but are assumed to be spatial frequencies here,
+		# to allow direct comparisons to FFT computations, hence the 2pi factors in denominator and phase.
+		# Note that this is purely conventional.
+		den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T) * (2.*np.pi)**2
 		phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
 		return (phase * self.num_weight[None,:]/den_weight).sum(-1)
 
