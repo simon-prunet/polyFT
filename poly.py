@@ -5,6 +5,7 @@
 
 
 import numpy as np
+import scipy as sp
 
 def rot(arr):
     return np.vstack((-arr[:,1],arr[:,0])).T
@@ -49,33 +50,120 @@ class polyFT:
 		return (phase * self.num_weight[None,:]/den_weight).sum(-1)
 
 
+class square_FT(polyFT):
+	'''
+	Derived class for a square mask.
+	Initialization takes half size c as input
+	'''
 
-def hexagon_coordinates(R=1.0):
-	'''
-	computes coordinates of hexagon vertices.
-	R is outer circle radius
-	'''
-	r = np.sqrt(3.)/2. * R # inner radius
-	Gamma = np.array([[R,0.],[R/2,r],[-R/2,r],[-R,0.],[-R/2,-r],[R/2,-r]])
-	return (Gamma)
+	def __init__(self,c):
 
-def hexagon_transform(W,R=1.0):
-	'''
-	computes FT of hexagon mask of outer radius R.
-	'''
-	u = 2.*np.pi * W[:,0]
-	v = 2.*np.pi * W[:,1]
-	s3 = np.sqrt(3.)
-	calc = -4*s3/(u+s3*v)/(u-s3*v)*np.cos(u*R) + 2.*s3/u/(u+s3*v)*np.cos(0.5*u*R-s3/2.*v*R) + 2.*s3/u/(u-s3*v)*np.cos(u/2*R+s3/2*v*R)
-	return(calc)
+		self.c = c
+		Gamma = self.square_coordinates(self.c)
+		super().__init__(Gamma)
+		return
 
-def compute_W_array(n=1024):
+	def square_coordinates(self,c):
+
+		arr = np.array(([c,c],[c,-c],[-c,-c],[-c,c]))
+		return(arr)
+
+	def square_transform(self,W):
+		'''
+		computes FT of square mask of half size c
+		'''
+		u = 2.*np.pi * W[:,0]
+		v = 2.*np.pi * W[:,1]
+		u0 = np.abs(u)<1e-10
+		v0 = np.abs(v)<1e-10
+		uv0 = u0*v0
+		res = 4./(u*v)*np.sin(u*self.c)*np.sin(v*self.c)
+		res[u0] = 4.*self.c/v[u0]*np.sin(v[u0]*self.c)
+		res[v0] = 4.*self.c/u[v0]*np.sin(u[v0]*self.c)
+		res[uv0] = 4.*self.c**2
+		return(res)
+
+
+
+class disk_FT (polyFT):
+
 	'''
-	computes 2D coordinates of spatial frequencies as a list of 2D vectors
+	Derived class for a circular mask.
+	Initialization takes radius and number of points 
+	for the polygonal approximation of the disk
+	'''
+
+	def __init__(self, n, R=1.0):
+
+		self.R = R
+
+		theta = np.arange(n)/n * 2.*np.pi
+		Gamma = np.vstack((R*np.cos(theta),-R*np.sin(theta))).T
+		super().__init__(Gamma)
+
+		return
+
+	def disk_transform(self,W):
+		'''
+		computes FT of disk of radius R
+		'''
+		rho = 2.*np.pi*np.linalg.norm(W,axis=1)
+		res = 2.*np.pi*self.R**2 * sp.special.j1(rho*self.R) / (rho*self.R)
+		res[rho<1e-10] = np.pi*self.R**2
+		return(res)
+
+
+class hexagon_FT(polyFT):
+
+	'''
+	Derived class for an hexagonal mask.
+	Initialization takes outer radius as input
+	'''
+
+	def __init__ (self, R=1.0):
+
+		self.R = R
+		Gamma = self.hexagon_coordinates(self.R)
+		super().__init__(Gamma)
+
+		return
+
+	def hexagon_coordinates(self,R):
+		'''
+		computes coordinates of hexagon vertices.
+		R is outer circle radius
+		'''
+		r = np.sqrt(3.)/2. * R # inner radius
+		Gamma = np.array([[R,0.],[R/2,-r],[-R/2,-r],[-R,0.],[-R/2,r],[R/2,r]])
+		return (Gamma)
+
+	def hexagon_transform(self,W):
+		'''
+		computes FT of hexagon mask of outer radius R.
+		'''
+		u = 2.*np.pi * W[:,0]
+		v = 2.*np.pi * W[:,1]
+		s3 = np.sqrt(3.)
+		calc = -4*s3/(u+s3*v)/(u-s3*v)*np.cos(u*self.R)+ 2.*s3/u/(u+s3*v)*np.cos(u/2*self.R-s3/2*v*self.R) + 2.*s3/u/(u-s3*v)*np.cos(u/2*self.R+s3/2*v*self.R)
+		return(calc)
+
+
+
+def compute_W_array(n=1024,dims=2):
+	'''
+	computes 2D coordinates of spatial frequencies as a list of 2D vectors.
+	For dims=1, computes a regular sampling of the v=0 line.
+	For dims=2, computes a regular sampling of the uv plane.
 	'''
 	f = np.fft.fftshift(np.fft.fftfreq(n))
-	fxx,fyy = np.meshgrid(f,f)
-	W = np.vstack((fxx.flatten(),fyy.flatten())).T
+	if (dims==1):
+		W = np.vstack((f,np.zeros_like(f))).T
+		return(W)
+	else:
+		fxx,fyy = np.meshgrid(f,f)
+		W = np.vstack((fxx.flatten(),fyy.flatten())).T
 	return(W)
+
+
 
 
