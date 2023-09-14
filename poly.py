@@ -112,6 +112,42 @@ class disk_FT (polyFT):
 		res[rho<1e-10] = np.pi*self.R**2
 		return(res)
 
+class sampled_disk_FT:
+	'''
+	This class implements a discretized, sampled disk mask
+	of a given radius and for a given number of pixels.
+	Inputs are disk radius and linear pixel size of 2D array.
+	Returns the 2D FFT of the array.
+	'''
+
+	def __init__(self, npixels, R=10.0):
+
+		self.R = R
+		self.npixels = npixels
+		# Create mask array
+		self.mask = np.zeros((self.npixels,self.npixels))
+		# Compute cyclic coordinates
+		x = np.outer(np.ones(self.npixels),np.fft.fftfreq(self.npixels)*self.npixels)
+		y = x.T
+		rad = np.sqrt(x**2+y**2)
+		self.mask[rad < R] = 1.0
+		return
+
+	def __call__(self,return_W=True):
+		
+		'''
+		Computes the 2D FFT of the pixelized mask
+		'''
+		if (return_W):
+			W = compute_W_array(self.npixels)
+		res = np.fft.fftshift(np.fft.fft2(self.mask))
+		if (return_W):
+			return(W,res)
+		else:
+			return(res)
+
+
+
 
 class hexagon_FT(polyFT):
 
