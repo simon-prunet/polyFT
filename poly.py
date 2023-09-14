@@ -184,6 +184,57 @@ class hexagon_FT(polyFT):
 		return(calc)
 
 
+class petal_FT(polyFT):
+
+	'''
+	Derived class for petal mask
+	Initialization takes as inputs outer mask radius, outer radius, number of petals, 
+	number of points per half petal border, and profile type
+	'''
+
+	def __init__(self, r_out=2, n_petals=8, n_border=100, profile_type='arch_cos'):
+
+		self.r_out = r_out
+		self.n_petals = n_petals
+		self.n_border = n_border
+		self.profile_type = profile_type
+		self.profile = self.create_profile()
+
+	def create_profile(self):
+		if self.profile_type=='arch_cos':
+			def arch_cos(r):
+				'''
+				Function that returns 1 till r_out/2, 0
+				outside r_out, arch cosine betweeen r_out/2 and r_out
+				'''
+				r = np.atleast_1d(r)
+				res = np.zeros_like(r)
+				res [r<=self.r_out/2.] = 1.0
+				res [r>self.r_out] = 0.0
+				ou = np.where((r>self.r_out/2.)*(r<=self.r_out))
+				res[ou] = np.cos((r[ou]-self.r_out/2.)/self.r_out * 2*np.pi)/2. + 0.5
+				return(res)
+			return (arch_cos)
+
+
+	def pixelized_mask(self, n_pixels, n_pad, inverted=True):
+		'''
+		Create digitized pixel mask or size n_pixels x n_pixels,
+		of physical linear size r_out * n_pad
+		'''
+		self.n_pixels = n_pixels
+		self.r_max = n_pad * self.r_out
+		arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
+		x, y = np.meshgrid(arr,arr)
+		rxy = np.sqrt(x**2+y**2)
+		angxy = np.arctan2(y,x)
+		Num = self.n_petals
+		pxy = self.profile(rxy)
+		neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>self.r_out)
+		if (inverted):
+			return (1.0-neg)
+		else:
+			return(neg)
 
 def compute_W_array(n=1024,dims=2):
 	'''
