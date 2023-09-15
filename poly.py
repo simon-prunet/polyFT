@@ -192,8 +192,15 @@ class petal_FT(polyFT):
 	number of points per half petal border, and profile type
 	'''
 
-	def __init__(self, r_out=2, n_petals=8, n_border=100, profile_type='arch_cos'):
+	def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border=100, profile_type='arch_cos'):
 
+		'''
+		Initializes petal_FT class, derived from poly_FT.
+		Takes inner and outer radii (r_in, r_out) of extinction profile, number of petals, number
+		of border sampling points per half petal, and type of profile as inputs.
+		'''
+
+		self.r_in = r_in
 		self.r_out = r_out
 		self.n_petals = n_petals
 		self.n_border = n_border
@@ -209,12 +216,22 @@ class petal_FT(polyFT):
 				'''
 				r = np.atleast_1d(r)
 				res = np.zeros_like(r)
-				res [r<=self.r_out/2.] = 1.0
+				res [r<=self.r_in] = 1.0
 				res [r>self.r_out] = 0.0
-				ou = np.where((r>self.r_out/2.)*(r<=self.r_out))
-				res[ou] = np.cos((r[ou]-self.r_out/2.)/self.r_out * 2*np.pi)/2. + 0.5
+				ou = np.where((r>self.r_in)*(r<=self.r_out))
+				res[ou] = np.cos((r[ou]-self.r_in)/(self.r_out-self.r_in) * np.pi)/2. + 0.5
 				return(res)
 			return (arch_cos)
+
+	def petal_coordinates(self, inverse_curvature=False):
+		'''
+		Computes coordinates of polygon summits on the petal borders.
+		Makes sure singular points of the border are included
+		'''
+		r = np.linspace(self.r_in,self.r_out,self.n_border)
+		theta = self.profile(r) * np.pi / self.n_petals
+
+		r = np.concatenate(r,)
 
 
 	def pixelized_mask(self, n_pixels, n_pad, inverted=True):
