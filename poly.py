@@ -4,7 +4,11 @@
 ### which in numpy language is written (B*C).sum(-1)
 
 
-import cupy as np
+try:
+    import cupy as np
+except:
+    import numpy as np
+
 import scipy as sp
 
 def rot(arr):
@@ -192,7 +196,7 @@ class petal_FT(polyFT):
     number of points per half petal border, and profile type
     '''
 
-    def __init__(self, r_in = 1, r_out=2, n_petals=8, profile_type='arch_cos'):
+    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos'):
 
         '''
         Initializes petal_FT class, derived from poly_FT.
@@ -203,8 +207,11 @@ class petal_FT(polyFT):
         self.r_in = r_in
         self.r_out = r_out
         self.n_petals = n_petals
+        self.n_border = n_border
         self.profile_type = profile_type
         self.profile = self.create_profile()
+        Gamma = self.petal_coordinates()
+        super().__init__(Gamma)
 
     def create_profile(self):
         if self.profile_type=='arch_cos':
@@ -222,12 +229,11 @@ class petal_FT(polyFT):
                 return(res)
             return (arch_cos)
 
-    def petal_coordinates(self, n_border=100, inverse_curvature=False):
+    def petal_coordinates(self, inverse_curvature=False):
         '''
         Computes coordinates of polygon summits on the petal borders.
         Makes sure singular points of the border are included
         '''
-        self.n_border = n_border
         r = np.linspace(self.r_out,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
@@ -241,7 +247,7 @@ class petal_FT(polyFT):
             rr = np.concatenate((rr,r))
             ttheta = np.concatenate((ttheta,theta + i*2.*np.pi/self.n_petals))
 
-        return(rr*np.cos(ttheta), rr*np.sin(ttheta))
+        return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
 
     def pixelized_mask(self, n_pixels=2048, n_pad=2, inverted=True):
         '''
@@ -262,13 +268,28 @@ class petal_FT(polyFT):
         else:
             return(neg)
 
-def compute_W_array(n=1024,dims=2):
+    def pixelized_FT(self,n_pixels=2048, n_pad=2, inverted=True, return_W=True):
+        '''
+        Calls pixelized_mask and computes its 2D FFT.
+        Optionally computes 2D array of frequencies
+        ### BEWARE: mask needs to be centered on zero before FFT... TO BE DONE
+        '''
+        mask = self.pixelized_mask(n_pixels,n_pad,inverted)
+        fmask = np.fft.fftshift(np.fft.fft2(mask))
+        if (return_W):
+            W = compute_W_array(n_pixels,step=self.r_max/n_pixels)
+            return (W, fmask)
+        else:
+            return (fmask)
+
+
+def compute_W_array(n=1024,dims=2,step=1.0):
     '''
     computes 2D coordinates of spatial frequencies as a list of 2D vectors.
     For dims=1, computes a regular sampling of the v=0 line.
     For dims=2, computes a regular sampling of the uv plane.
     '''
-    f = np.fft.fftshift(np.fft.fftfreq(n))
+    f = np.fft.fftshift(np.fft.fftfreq(n,d=step))
     if (dims==1):
         W = np.vstack((f,np.zeros_like(f))).T
         return(W)
