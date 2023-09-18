@@ -192,7 +192,7 @@ class petal_FT(polyFT):
 	number of points per half petal border, and profile type
 	'''
 
-	def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border=100, profile_type='arch_cos'):
+	def __init__(self, r_in = 1, r_out=2, n_petals=8, profile_type='arch_cos'):
 
 		'''
 		Initializes petal_FT class, derived from poly_FT.
@@ -203,7 +203,6 @@ class petal_FT(polyFT):
 		self.r_in = r_in
 		self.r_out = r_out
 		self.n_petals = n_petals
-		self.n_border = n_border
 		self.profile_type = profile_type
 		self.profile = self.create_profile()
 
@@ -223,11 +222,12 @@ class petal_FT(polyFT):
 				return(res)
 			return (arch_cos)
 
-	def petal_coordinates(self, inverse_curvature=False):
+	def petal_coordinates(self, n_border=100, inverse_curvature=False):
 		'''
 		Computes coordinates of polygon summits on the petal borders.
 		Makes sure singular points of the border are included
 		'''
+		self.n_border = n_border
 		r = np.linspace(self.r_out,self.r_in,self.n_border)
 		theta = self.profile(r) * np.pi / self.n_petals
 
@@ -243,7 +243,7 @@ class petal_FT(polyFT):
 
 		return(rr*np.cos(ttheta), rr*np.sin(ttheta))
 
-	def pixelized_mask(self, n_pixels, n_pad, inverted=True):
+	def pixelized_mask(self, n_pixels=2048, n_pad=2, inverted=True):
 		'''
 		Create digitized pixel mask or size n_pixels x n_pixels,
 		of physical linear size r_out * n_pad
