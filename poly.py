@@ -228,11 +228,20 @@ class petal_FT(polyFT):
 		Computes coordinates of polygon summits on the petal borders.
 		Makes sure singular points of the border are included
 		'''
-		r = np.linspace(self.r_in,self.r_out,self.n_border)
+		r = np.linspace(self.r_out,self.r_in,self.n_border)
 		theta = self.profile(r) * np.pi / self.n_petals
 
-		r = np.concatenate(r,)
+		r = np.concatenate((np.flip(r)[1:-1],r))
+		theta = np.concatenate((-np.flip(theta)[1:-1],theta))
 
+		rr = r.copy()
+		ttheta = theta.copy()
+
+		for i in range(1,self.n_petals):
+			rr = np.concatenate((rr,r))
+			ttheta = np.concatenate((ttheta,theta + i*2.*np.pi/self.n_petals))
+
+		return(rr*np.cos(ttheta), rr*np.sin(ttheta))
 
 	def pixelized_mask(self, n_pixels, n_pad, inverted=True):
 		'''
