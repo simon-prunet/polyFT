@@ -4,7 +4,7 @@
 ### which in numpy language is written (B*C).sum(-1)
 
 
-import numpy as np
+import cupy as np
 import scipy as sp
 
 def rot(arr):
