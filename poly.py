@@ -210,6 +210,10 @@ class petal_FT(polyFT):
         self.n_border = n_border
         self.profile_type = profile_type
         self.profile = self.create_profile()
+        self.n_pixels = None
+        self.n_pad = None
+        self.r_max = None
+
         Gamma = self.petal_coordinates()
         super().__init__(Gamma)
 
@@ -255,8 +259,10 @@ class petal_FT(polyFT):
         of physical linear size r_out * n_pad
         '''
         self.n_pixels = n_pixels
-        self.r_max = n_pad * self.r_out
-        arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
+        self.n_pad = n_pad
+        self.r_max = self.n_pad * self.r_out
+        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
         x, y = np.meshgrid(arr,arr)
         rxy = np.sqrt(x**2+y**2)
         angxy = np.arctan2(y,x)
@@ -264,9 +270,27 @@ class petal_FT(polyFT):
         pxy = self.profile(rxy)
         neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>self.r_out)
         if (inverted):
+            # return x
             return (1.0-neg)
         else:
             return(neg)
+
+    def pixelized_bbox(self,upper=True):
+        '''
+        Computes the bounding box of the (centered) pixelized mask. 
+        To be used in imshow routine with the "extent" keyword.
+        upper=True gives the bounding box for origin='upper' in imshow
+        '''
+        if (self.r_max is None or self.n_pixels is None):
+            print ('Call pixelized_mask method first.')
+            return
+
+        pixel_size = 2.*self.r_max / self.n_pixels
+        if upper:
+            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+        else:
+            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+        return (extent)
 
     def pixelized_FT(self,n_pixels=2048, n_pad=2, inverted=True, return_W=True):
         '''
