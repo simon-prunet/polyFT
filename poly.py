@@ -116,6 +116,53 @@ class disk_FT (polyFT):
         res[rho<1e-10] = np.pi*self.R**2
         return(res)
 
+    def pixelized_disk(self,n_pixels,n_pad):
+        '''
+        creates pixelized disk mask of radius R, with zero padding factor n_pad,
+        and n_pixels on the side of the image.
+        '''
+        self.n_pixels = n_pixels
+        self.n_pad = n_pad
+        self.r_max = self.n_pad * self.R
+        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
+        x, y = np.meshgrid(arr,arr)
+        rxy = np.sqrt(x**2+y**2)
+        mask = np.zeros((self.n_pixels,self.n_pixels))
+        mask[rxy<self.R] = 1.0
+        return (mask)
+
+    def pixelized_bbox(self,upper=True):
+        '''
+        Computes the bounding box of the (centered) pixelized mask. 
+        To be used in imshow routine with the "extent" keyword.
+        upper=True gives the bounding box for origin='upper' in imshow
+        '''
+        if (self.n_pixels is None):
+            print ('Call pixelized_mask method first.')
+            return
+
+        pixel_size = 2.*self.r_max / self.n_pixels
+        if upper:
+            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+        else:
+            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+        return (extent)
+
+    def pixelized_FT(self,n_pixels=2048, n_pad=2, return_W=True):
+
+        mask = self.pixelized_disk(n_pixels,n_pad)
+        fmask = np.fft.fftshift(np.fft.fft2(mask))
+        # Normalize: divide by number of pixels, multiply by surface of image
+        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
+        if (return_W):
+            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
+            return (W, fmask)
+        else:
+            return (fmask)
+
+
+
 class sampled_disk_FT:
     '''
     This class implements a discretized, sampled disk mask
@@ -300,8 +347,9 @@ class petal_FT(polyFT):
         '''
         mask = self.pixelized_mask(n_pixels,n_pad,inverted)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
+        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
         if (return_W):
-            W = compute_W_array(n_pixels,step=self.r_max/n_pixels)
+            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
             return (W, fmask)
         else:
             return (fmask)
