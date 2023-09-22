@@ -10,6 +10,8 @@ except:
     import numpy as np
 
 import scipy as sp
+import os
+from scipy.io import loadmat
 
 def rot(arr):
     return np.vstack((-arr[:,1],arr[:,0])).T
@@ -243,7 +245,7 @@ class petal_FT(polyFT):
     number of points per half petal border, and profile type
     '''
 
-    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos'):
+    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos', **kwargs):
 
         '''
         Initializes petal_FT class, derived from poly_FT.
@@ -256,10 +258,25 @@ class petal_FT(polyFT):
         self.n_petals = n_petals
         self.n_border = n_border
         self.profile_type = profile_type
-        self.profile = self.create_profile()
         self.n_pixels = None
         self.n_pad = None
         self.r_max = None
+
+        if (self.profile_type=='sister'):
+            if ('profile_path' not in kwargs.keys()):
+                print('For a SISTER profile, needs MATLAB path to create the profile')
+                return
+            self.profile_path = kwargs['profile_path']
+            if (not os.path.exists(self.profile_path)):
+                print('SISTER profile path %s does not exist'%self.profile_path)
+                return
+            self.occ = loadmat(self.profile_path)
+            self.r_out = float(self.occ['occulterDiameter'])/2.
+            self.r_in  = self.r_out - float(self.occ['petalLength'])
+            self.n_petals = int(self.occ['numPetals'])
+
+        self.profile = self.create_profile()
+
 
         Gamma = self.petal_coordinates()
         super().__init__(Gamma)
@@ -279,6 +296,25 @@ class petal_FT(polyFT):
                 res[ou] = np.cos((r[ou]-self.r_in)/(self.r_out-self.r_in) * np.pi)/2. + 0.5
                 return(res)
             return (arch_cos)
+        if self.profile_type=='sister':
+            # Get infos and profile from Matlab file
+            
+            def sister(r):
+                '''
+                Function that does a linear interpolation of the sampled SISTER profile
+                '''
+                r = np.atleast_1d(r)
+                if not np.all(r[:-1]<=r[1:]):
+                    # Input must be sorted 
+                    iarg = np.argsort(r)
+                    res = np.zeros_like(r)
+                    res[iarg] = np.interp(r[iarg],self.occ['r'].squeeze(),self.occ['Profile'].squeeze(),right=0.0)
+                else:
+                    # Already sorted
+                    res = np.interp(r,self.occ['r'].squeeze(),self.occ['Profile'].squeeze(),right=0.0)
+                return(res)
+            return (sister)
+
 
     def petal_coordinates(self, inverse_curvature=False):
         '''
@@ -297,6 +333,9 @@ class petal_FT(polyFT):
         for i in range(1,self.n_petals):
             rr = np.concatenate((rr,r))
             ttheta = np.concatenate((ttheta,theta + i*2.*np.pi/self.n_petals))
+
+        # Put in clockwise order (counterclockwise as seen along +z)
+        ttheta = np.flip(ttheta)
 
         return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
 
