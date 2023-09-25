@@ -305,9 +305,12 @@ class petal_FT(polyFT):
                 '''
                 r = np.atleast_1d(r)
                 if not np.all(r[:-1]<=r[1:]):
-                    # Input must be sorted 
-                    iarg = np.argsort(r)
+                    # Input must be sorted
+
+                    iarg = np.argsort(r,axis=None) # Sort on flattened array, important if r is 2D
                     res = np.zeros_like(r)
+                    if (r.ndim==2):
+                        iarg = np.unravel_index(iarg,r.shape) # Get 2D index coordinates from flattened array indices
                     res[iarg] = np.interp(r[iarg],self.occ['r'].squeeze(),self.occ['Profile'].squeeze(),right=0.0)
                 else:
                     # Already sorted
@@ -354,7 +357,7 @@ class petal_FT(polyFT):
         angxy = np.arctan2(y,x)
         Num = self.n_petals
         pxy = self.profile(rxy)
-        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>self.r_out)
+        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>=self.r_out)
         if (inverted):
             # return x
             return (1.0-neg)
