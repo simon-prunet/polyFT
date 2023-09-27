@@ -271,7 +271,11 @@ class petal_FT(polyFT):
                 print('SISTER profile path %s does not exist'%self.profile_path)
                 return
             self.occ = loadmat(self.profile_path)
-            self.r_out = float(self.occ['occulterDiameter'])/2.
+            # Squeeze occ['r'] and occ['Profile'] for further use
+            self.occ['r'] = self.occ['r'].squeeze()
+            self.occ['Profile'] = self.occ['Profile'].squeeze()
+            #
+            self.r_out = self.occ['r'][-1] # Last defined value of sampled SISTER profile
             self.r_in  = self.r_out - float(self.occ['petalLength'])
             self.n_petals = int(self.occ['numPetals'])
 
@@ -311,10 +315,10 @@ class petal_FT(polyFT):
                     res = np.zeros_like(r)
                     if (r.ndim==2):
                         iarg = np.unravel_index(iarg,r.shape) # Get 2D index coordinates from flattened array indices
-                    res[iarg] = np.interp(r[iarg],self.occ['r'].squeeze(),self.occ['Profile'].squeeze(),right=0.0)
+                    res[iarg] = np.interp(r[iarg],self.occ['r'],self.occ['Profile'],right=0.0)
                 else:
                     # Already sorted
-                    res = np.interp(r,self.occ['r'].squeeze(),self.occ['Profile'].squeeze(),right=0.0)
+                    res = np.interp(r,self.occ['r'],self.occ['Profile'],right=0.0)
                 return(res)
             return (sister)
 
@@ -350,6 +354,7 @@ class petal_FT(polyFT):
         self.n_pixels = n_pixels
         self.n_pad = n_pad
         self.r_max = self.n_pad * self.r_out
+        self.step = 2.*self.r_max / self.n_pixels
         # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
         arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
         x, y = np.meshgrid(arr,arr)
