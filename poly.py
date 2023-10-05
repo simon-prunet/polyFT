@@ -272,8 +272,8 @@ class petal_FT(polyFT):
                 return
             self.occ = loadmat(self.profile_path)
             # Squeeze occ['r'] and occ['Profile'] for further use
-            self.occ['r'] = self.occ['r'].squeeze()
-            self.occ['Profile'] = self.occ['Profile'].squeeze()
+            self.occ['r'] = np.array(self.occ['r'].squeeze())
+            self.occ['Profile'] = np.array(self.occ['Profile'].squeeze())
             #
             self.r_out = self.occ['r'][-1] # Last defined value of sampled SISTER profile
             self.r_in  = self.r_out - float(self.occ['petalLength'])
@@ -315,10 +315,10 @@ class petal_FT(polyFT):
                     res = np.zeros_like(r)
                     if (r.ndim==2):
                         iarg = np.unravel_index(iarg,r.shape) # Get 2D index coordinates from flattened array indices
-                    res[iarg] = np.interp(r[iarg],self.occ['r'],self.occ['Profile'],right=0.0)
+                    res[iarg] = np.interp(np.array(r[iarg]),np.array(self.occ['r']),np.array(self.occ['Profile']),right=0.0)
                 else:
                     # Already sorted
-                    res = np.interp(r,self.occ['r'],self.occ['Profile'],right=0.0)
+                    res = np.interp(np.array(r),np.array(self.occ['r']),np.array(self.occ['Profile']),right=0.0)
                 return(res)
             return (sister)
 
