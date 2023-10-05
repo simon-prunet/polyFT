@@ -18,7 +18,7 @@ def rot(arr):
 
 class polyFT:
     
-    def __init__(self, Gamma):
+    def __init__(self, Gamma, sinc_formula=True):
 
         '''
         Initializes the polygonal Fourier Transform class.
@@ -31,13 +31,22 @@ class polyFT:
 
         self.Gamma = Gamma
         self.npoints = Gamma.shape[0]
-        # Compute normalized polygone edges \alpha_n
-        #self.Alpha = Gamma - np.roll(Gamma,1,axis=0)
-        self.Alpha = np.roll(Gamma,-1,axis=0) - Gamma
-        self.Alpha /= np.linalg.norm(self.Alpha,axis=1)[:,None]
-        # Also keep shifted Alpha matrix handy
-        self.Alpha_m1 = np.roll(self.Alpha,1,axis=0)
-        self.num_weight = ( rot(self.Alpha)*self.Alpha_m1 ).sum(-1)
+        if sinc_formula is True:
+            self.sinc_formula=True
+            # Use formula based on sinc, from J. Wuttke (arxiv:1703.00255, math-ph)
+            # This formula uses half polygone edge vectors and coordinates of edge middle
+            self.Ej = (np.roll(Gamma,-1,axis=0) - Gamma)/2.
+            self.Rj = (np.roll(Gamma,-1,axis=0) + Gamma)/2.
+        else:
+            # Use formula from 1983 original paper 
+            # Compute normalized polygone edges \alpha_n
+            #self.Alpha = Gamma - np.roll(Gamma,1,axis=0)
+            self.sinc_formula=False
+            self.Alpha = np.roll(Gamma,-1,axis=0) - Gamma
+            self.Alpha /= np.linalg.norm(self.Alpha,axis=1)[:,None]
+            # Also keep shifted Alpha matrix handy
+            self.Alpha_m1 = np.roll(self.Alpha,1,axis=0)
+            self.num_weight = ( rot(self.Alpha)*self.Alpha_m1 ).sum(-1)
 
         return
 
@@ -51,9 +60,20 @@ class polyFT:
         # Beware that W are wave vectors in the paper, but are assumed to be spatial frequencies here,
         # to allow direct comparisons to FFT computations, hence the 2pi factors in denominator and phase.
         # Note that this is purely conventional.
-        den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T) * (2.*np.pi)**2
-        phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
-        return (phase * self.num_weight[None,:]/den_weight).sum(-1)
+
+        if self.sinc_formula is True:
+            phase = np.exp(2j*np.pi*np.dot(W,self.Rj.T))
+            Wx = rot(W)
+            num_weight = np.sinc(2.*np.dot(W,self.Ej.T)) * np.dot(Wx,self.Ej.T) /(np.linalg.norm(W,axis=1)**2)[:,None] / (1j*np.pi)
+            result = (-phase * num_weight).sum(-1)
+            # Take care of W=(0,0) null frequency case: result is polygone area
+            result[np.linalg.norm(W,axis=1)==0] = 0.5 * np.sum(-np.roll(rot(self.Gamma),1,axis=0)*self.Gamma)
+            return (result)
+        else: 
+            # old formula
+            den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T) * (2.*np.pi)**2
+            phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
+            return (phase * self.num_weight[None,:]/den_weight).sum(-1)
 
 
 class square_FT(polyFT):
@@ -209,11 +229,11 @@ class hexagon_FT(polyFT):
     Initialization takes outer radius as input
     '''
 
-    def __init__ (self, R=1.0):
+    def __init__ (self, R=1.0, **kwargs):
 
         self.R = R
         Gamma = self.hexagon_coordinates(self.R)
-        super().__init__(Gamma)
+        super().__init__(Gamma,**kwargs)
 
         return
 
