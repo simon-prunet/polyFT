@@ -348,7 +348,8 @@ class petal_FT(polyFT):
         Computes coordinates of polygon summits on the petal borders.
         Makes sure singular points of the border are included
         '''
-        r = np.linspace(self.r_out,self.r_in,self.n_border)
+        eps = 1e-10
+        r = np.linspace(self.r_in,self.r_out+eps,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
         r = np.concatenate((np.flip(r)[1:-1],r))
@@ -363,6 +364,7 @@ class petal_FT(polyFT):
 
         # Put in clockwise order (counterclockwise as seen along +z)
         ttheta = np.flip(ttheta)
+        rr = np.flip(rr)
 
         return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
 
