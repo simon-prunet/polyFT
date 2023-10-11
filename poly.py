@@ -349,7 +349,7 @@ class petal_FT(polyFT):
         Makes sure singular points of the border are included
         '''
         eps = 1e-10
-        r = np.linspace(self.r_in,self.r_out+eps,self.n_border)
+        r = np.linspace(self.r_out+eps,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
         r = np.concatenate((np.flip(r)[1:-1],r))
