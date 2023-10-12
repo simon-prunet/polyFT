@@ -5,16 +5,31 @@
 
 
 try:
-    import cupy as np
+    import cupy as cp
+    import numpy as np
+    cuda_on = True
 except:
     import numpy as np
+    cuda_on = False
 
 import scipy as sp
 import os
 from scipy.io import loadmat
 
+def get_array_module(arr):
+    '''
+    if cuda is available, and arr is a cupy array, returns cupy, otherwise returns numpy
+    '''
+    if (cuda_on):
+        xp = cp.get_array_module(arr)
+    else:
+        xp = np
+    return(xp)
+
+
 def rot(arr):
-    return np.vstack((-arr[:,1],arr[:,0])).T
+    xp = get_array_module(arr)
+    return xp.vstack((-arr[:,1],arr[:,0])).T
 
 class polyFT:
     
@@ -50,7 +65,7 @@ class polyFT:
 
         return
 
-    def __call__(self,W):
+    def process (self,w):
         
         '''
         Computes Fourier transform of indicatrix function of polygonal shape,
@@ -60,21 +75,66 @@ class polyFT:
         # Beware that W are wave vectors in the paper, but are assumed to be spatial frequencies here,
         # to allow direct comparisons to FFT computations, hence the 2pi factors in denominator and phase.
         # Note that this is purely conventional.
+        # If W is a cupy array, computations will be done on GPU and the result will be a cupy array
+        
+        xp = get_array_module(w)
+        Gamma = xp.asarray(self.Gamma)
 
         if self.sinc_formula is True:
-            phase = np.exp(2j*np.pi*np.dot(W,self.Rj.T))
-            Wx = rot(W)
-            num_weight = np.sinc(2.*np.dot(W,self.Ej.T)) * np.dot(Wx,self.Ej.T) /(np.linalg.norm(W,axis=1)**2)[:,None] / (1j*np.pi)
+            Rj = xp.asarray(self.Rj)
+            Ej = xp.asarray(self.Ej)
+
+            phase = xp.exp(2j*xp.pi*xp.dot(w,Rj.T))
+            wx = rot(w)
+            #num_weight = xp.sinc(2.*xp.dot(w,Ej.T)) * np.dot(wx,Ej.T) /(xp.linalg.norm(w,axis=1)**2)[:,None] / (1j*xp.pi)
             result = (-phase * num_weight).sum(-1)
             # Take care of W=(0,0) null frequency case: result is polygone area
-            result[np.linalg.norm(W,axis=1)==0] = 0.5 * np.sum(-np.roll(rot(self.Gamma),1,axis=0)*self.Gamma)
+            result[xp.linalg.norm(w,axis=1)==0] = 0.5 * xp.sum(-xp.roll(rot(Gamma),1,axis=0)*Gamma)
             return (result)
         else: 
             # old formula
-            den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T) * (2.*np.pi)**2
-            phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
-            return (phase * self.num_weight[None,:]/den_weight).sum(-1)
+            Alpha = xp.asarray(self.Alpha)
+            Alpha_m1 = xp.asarray(self.Alpha_m1)
+            num_weight = xp.asarray(self.num_weight)
 
+            den_weight = xp.dot(w,Alpha.T) * xp.dot(w,Alpha_m1.T) * (2.*xp.pi)**2
+            phase = xp.exp(2j*xp.pi*xp.dot(w,Gamma.T))
+            return (phase * num_weight[None,:]/den_weight).sum(-1)
+
+    def __call__ (self,W,cpu_memory_limit=50,gpu_memory_limit=10):
+
+        '''
+        Call the process function in a loop to avoid memory overload, 
+        especially when computing on GPU.
+        cpu and gpu memory limits are expressed in GigaBytes.
+        '''
+
+        cpu_limit = cpu_memory_limit * 1024**3*8
+        gpu_limit = gpu_memory_limit * 1024**3*8
+        # Memory allocation will be dominated by the different dot (tensor) products
+        # There are three of them of size W.shape[0]*Gamma.shape[0]*sizeof(complex128)
+        nw = W.shape[0]
+        npo = self.npoints
+        if (cuda_on):
+            nslices = 3 * nw*npo*16 // gpu_limit # Complex numbers, double precision
+        else:
+            nslices = 3 * nw*npo*16 // cpu_limit
+
+        nslices = 10
+        res = np.zeros(nw,dtype=np.complex128)
+        indices = np.array_split(np.arange(nw),nslices)
+        for i in range(nslices):
+            print ('Processing slice number %d out of %d'%(i,nslices))
+            if (cuda_on):
+                wi = cp.asarray(W[indices[i],:])
+                print ('shape of wi is ',wi.shape)
+                resi = self.process(wi)
+                res[indices[i]] = cp.asnumpy(resi)
+                del wi, resi # Clean GPU memory
+            else:
+                wi = W[indices[i],:]
+                res[indices[i]] = self.process(wi)
+        return (res)
 
 class square_FT(polyFT):
     '''
@@ -348,7 +408,8 @@ class petal_FT(polyFT):
         Computes coordinates of polygon summits on the petal borders.
         Makes sure singular points of the border are included
         '''
-        r = np.linspace(self.r_out,self.r_in,self.n_border)
+        eps = 1e-10
+        r = np.linspace(self.r_out+eps,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
         r = np.concatenate((np.flip(r)[1:-1],r))
@@ -363,6 +424,7 @@ class petal_FT(polyFT):
 
         # Put in clockwise order (counterclockwise as seen along +z)
         ttheta = np.flip(ttheta)
+        rr = np.flip(rr)
 
         return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
 
