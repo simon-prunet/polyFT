@@ -33,7 +33,7 @@ def rot(arr):
 
 class polyFT:
     
-    def __init__(self, Gamma, sinc_formula=True):
+    def __init__(self, Gamma, sinc_formula=True, **kwargs):
 
         '''
         Initializes the polygonal Fourier Transform class.
@@ -83,11 +83,18 @@ class polyFT:
         if self.sinc_formula is True:
             Rj = xp.asarray(self.Rj)
             Ej = xp.asarray(self.Ej)
-
-            phase = xp.exp(2j*xp.pi*xp.dot(w,Rj.T))
             wx = rot(w)
-            #num_weight = xp.sinc(2.*xp.dot(w,Ej.T)) * np.dot(wx,Ej.T) /(xp.linalg.norm(w,axis=1)**2)[:,None] / (1j*xp.pi)
-            result = (-phase * num_weight).sum(-1)
+
+            print('After allocating Ej', cp._default_memory_pool.used_bytes())
+
+            num_weight = xp.exp(2j*xp.pi*xp.dot(w,Rj.T)) #phase term
+            print('After allocating phase', cp._default_memory_pool.used_bytes())
+            num_weight *= xp.sinc(2.*xp.dot(w,Ej.T)) # sinc term
+            num_weight *= np.dot(wx,Ej.T) # geometric term
+            
+            print('After computing num_weight', cp._default_memory_pool.used_bytes())
+
+            result = -num_weight.sum(-1) / xp.linalg.norm(w,axis=1)**2 / (1j*xp.pi) # 1/q^2 term
             # Take care of W=(0,0) null frequency case: result is polygone area
             result[xp.linalg.norm(w,axis=1)==0] = 0.5 * xp.sum(-xp.roll(rot(Gamma),1,axis=0)*Gamma)
             return (result)
@@ -97,9 +104,10 @@ class polyFT:
             Alpha_m1 = xp.asarray(self.Alpha_m1)
             num_weight = xp.asarray(self.num_weight)
 
-            den_weight = xp.dot(w,Alpha.T) * xp.dot(w,Alpha_m1.T) * (2.*xp.pi)**2
-            phase = xp.exp(2j*xp.pi*xp.dot(w,Gamma.T))
-            return (phase * num_weight[None,:]/den_weight).sum(-1)
+            den_weight = xp.dot(w,Alpha.T) 
+            den_weight *= xp.dot(w,Alpha_m1.T) * (2.*xp.pi)**2
+            weight = xp.exp(2j*xp.pi*xp.dot(w,Gamma.T))/den_weight
+            return (num_weight[None,:]*weight).sum(-1)
 
     def __call__ (self,W,cpu_memory_limit=50,gpu_memory_limit=10):
 
@@ -109,18 +117,19 @@ class polyFT:
         cpu and gpu memory limits are expressed in GigaBytes.
         '''
 
-        cpu_limit = cpu_memory_limit * 1024**3*8
-        gpu_limit = gpu_memory_limit * 1024**3*8
+        cpu_limit = cpu_memory_limit * 1024**3
+        gpu_limit = gpu_memory_limit * 1024**3
         # Memory allocation will be dominated by the different dot (tensor) products
         # There are three of them of size W.shape[0]*Gamma.shape[0]*sizeof(complex128)
         nw = W.shape[0]
         npo = self.npoints
         if (cuda_on):
-            nslices = 3 * nw*npo*16 // gpu_limit # Complex numbers, double precision
+            nslices = 3* nw*npo*16 // gpu_limit +1 # Complex numbers, double precision
         else:
-            nslices = 3 * nw*npo*16 // cpu_limit
+            nslices = 3* nw*npo*16 // cpu_limit +1
 
-        nslices = 10
+        print ('nslices = ',nslices)
+
         res = np.zeros(nw,dtype=np.complex128)
         indices = np.array_split(np.arange(nw),nslices)
         for i in range(nslices):
@@ -128,6 +137,7 @@ class polyFT:
             if (cuda_on):
                 wi = cp.asarray(W[indices[i],:])
                 print ('shape of wi is ',wi.shape)
+                print(cp._default_memory_pool.used_bytes())
                 resi = self.process(wi)
                 res[indices[i]] = cp.asnumpy(resi)
                 del wi, resi # Clean GPU memory
@@ -363,7 +373,7 @@ class petal_FT(polyFT):
 
 
         Gamma = self.petal_coordinates()
-        super().__init__(Gamma)
+        super().__init__(Gamma, **kwargs)
 
     def create_profile(self):
         if self.profile_type=='arch_cos':
