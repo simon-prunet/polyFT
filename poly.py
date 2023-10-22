@@ -368,14 +368,24 @@ class petal_FT(polyFT):
 
         return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
 
-    def pixelized_mask(self, n_pixels=2048, n_pad=2, inverted=True):
+    def set_the_scene(self, embed_factor=4, margin=0.01):
+        '''
+        Compute r_max (L in Claude's notations)
+        '''
+        self.embed_factor = embed_factor
+        self.margin = margin
+        self.n_pad = self.embed_factor*(1.0 + self.margin)
+        self.r_max = self.n_pad  * self.r_out # L for Claude
+
+        return
+
+    def pixelized_mask(self, n_pixels=2048, embed_factor=4, margin=0.01, inverted=True):
         '''
         Create digitized pixel mask or size n_pixels x n_pixels,
         of physical linear size r_out * n_pad
         '''
-        self.n_pixels = n_pixels
-        self.n_pad = n_pad
-        self.r_max = self.n_pad * self.r_out
+        self.n_pixels = n_pixels # N in Claude's notations
+        self.set_the_scene(embed_factor=embed_factor,margin=margin)
         self.step = 2.*self.r_max / self.n_pixels
         # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
         arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
@@ -408,13 +418,13 @@ class petal_FT(polyFT):
             extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
         return (extent)
 
-    def pixelized_FT(self,n_pixels=2048, n_pad=2, inverted=True, return_W=True):
+    def pixelized_FT(self,n_pixels=2048, embed_factor=4, margin=0.01, inverted=True, return_W=True):
         '''
         Calls pixelized_mask and computes its 2D FFT.
         Optionally computes 2D array of frequencies
         ### BEWARE: mask needs to be centered on zero before FFT... TO BE DONE
         '''
-        mask = self.pixelized_mask(n_pixels,n_pad,inverted)
+        mask = self.pixelized_mask(n_pixels,embed_factor,margin,inverted)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
         fmask /= self.n_pixels**2 / (2.*self.r_max)**2
         if (return_W):
