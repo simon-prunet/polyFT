@@ -23,11 +23,27 @@ class phasefilter:
 
     def __call__(self, return_coords=False):
 
-        X,Y = np.meshgrid(self.phase_axis,self.phase_axis)
+        if (cuda_on):
+            xp = cp
+            phase_axis = cp.asarray(self.phase_axis)
+        else:
+            xp = np
+            phase_axis = self.phase_axis
+        X,Y = xp.meshgrid(phase_axis,phase_axis)
+        phase = xp.zeros_like(X,dtype='complex128')
         filt = np.zeros((X.shape[0],X.shape[1],self.lambdaRange.size),dtype='complex128')
         for i in range(self.lambdaRange.size):
-            phase = -1j / (self.lambdaRange[i]*self.Z)*np.exp(1j*np.pi*(X**2+Y**2)/(self.lambdaRange[i]*self.Z))
-            filt[:,:,i] = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(phase)))
+            phase = -1j / (self.lambdaRange[i]*self.Z)*xp.exp(1j*xp.pi*(X**2+Y**2)/(self.lambdaRange[i]*self.Z))
+            tmp = xp.fft.ifftshift(phase)
+            tmp = xp.fft.fft2(tmp)
+            tmp = xp.fft.fftshift(tmp)
+            if (cuda_on):
+                filt[:,:,i] = cp.asnumpy(tmp)
+            else:
+                filt[:,:,i] = tmp
+        if (cuda_on and return_coords):
+            X = cp.asnumpy(X)
+            Y = cp.asnumpy(Y)
         if (return_coords):
             return (X,Y,filt)
         else:
@@ -53,10 +69,12 @@ class diffraction:
         return
 
     def compute_polygonal_fmask(self):
-        self.polygonal_fmask = self.petal(W)
+        self.polygonal_fmask = self.petal(self.W).reshape((self.m,self.m))
         return
+    
+    # def compute_discrete_fmask(self):
 
-    def compute_discretized_fmask(self, npixels):
+    # def compute_discretized_fmask(self, npixels):
         ## TO BE WRITTEN. MAKE SURE TO EXTRACT m*m central frequencies at the end
         ## from the discrete mask Fourier transform
         ## Call poly.pixelized_FT() 
@@ -67,16 +85,43 @@ class diffraction:
 
     def compute_diffraction_patterns(self):
 
-        self.diffracted = np.zeros((m,m,self.phase_filter.lambdaRange.size))
+        self.diffracted = np.zeros((self.m,self.m,self.phase_filter.lambdaRange.size))
+        if (cuda_on):
+            print ('Cuda is on !')
+            xp = cp
+            polygonal_fmask = cp.asarray(self.polygonal_fmask)
+            diffracted = cp.zeros((self.m,self.m),dtype='complex128')
+        else:
+            xp = np
+            polygonal_fmask = self.polygonal_fmask
+            diffracted = np.zeros((self.m,self.m),dtype='complex128')
         for i in range(self.phase_filter.lambdaRange.size):
-            self.diffracted[:,:,i] = 1.0 - np.fft.fftshift(
-                                                           np.fft.ifft2(
-                                                             np.fft.ifftshift(
-                                                               self.fresnel_filter[:,:,i]*self.polygonal_fmask
-                                                             )
-                                                            )
-                                                           )
+            if (cuda_on):
+                fresnel_filter = cp.asarray(self.fresnel_filter[:,:,i])
+            else:
+                fresnel_filter = self.fresnel_filter
+            diffracted = 1.0 - xp.fft.fftshift(
+                                                xp.fft.ifft2(
+                                                    xp.fft.ifftshift(
+                                                        fresnel_filter*polygonal_fmask
+                                                    )
+                                                )
+                                              )
+            if (cuda_on):
+                self.diffracted[:,:,i] = cp.asnumpy(diffracted)
+            else:
+                self.diffracted[:,:,i] = diffracted
         return
+
+    def compute_extent(self, upper=True):
+
+        r_max = self.petal.r_max
+        pixel_size = 2.*r_max / self.m
+        if upper:
+            extent = (-r_max-pixel_size/2., r_max-pixel_size/2.,r_max-pixel_size/2., -r_max-pixel_size/2. )
+        else:
+            extent = (-r_max-pixel_size/2., r_max-pixel_size/2.,-r_max-pixel_size/2., r_max-pixel_size/2. )
+        return (extent)
 
 
 

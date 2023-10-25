@@ -4,13 +4,16 @@
 ### which in numpy language is written (B*C).sum(-1)
 
 
-try:
-    import cupy as cp
-    import numpy as np
-    cuda_on = True
-except:
-    import numpy as np
-    cuda_on = False
+# try:
+#     import cupy as cp
+#     import numpy as np
+#     cuda_on = True
+# except:
+import numpy as np
+cuda_on = False
+
+# Essai !!
+# cuda_on = False
 
 import scipy as sp
 import os
@@ -85,14 +88,14 @@ class polyFT:
             Ej = xp.asarray(self.Ej)
             wx = rot(w)
 
-            print('After allocating Ej', cp._default_memory_pool.used_bytes())
+            # print('After allocating Ej', cp._default_memory_pool.used_bytes())
 
             num_weight = xp.exp(2j*xp.pi*xp.dot(w,Rj.T)) #phase term
-            print('After allocating phase', cp._default_memory_pool.used_bytes())
+            # print('After allocating phase', cp._default_memory_pool.used_bytes())
             num_weight *= xp.sinc(2.*xp.dot(w,Ej.T)) # sinc term
             num_weight *= np.dot(wx,Ej.T) # geometric term
             
-            print('After computing num_weight', cp._default_memory_pool.used_bytes())
+            # print('After computing num_weight', cp._default_memory_pool.used_bytes())
 
             result = -num_weight.sum(-1) / xp.linalg.norm(w,axis=1)**2 / (1j*xp.pi) # 1/q^2 term
             # Take care of W=(0,0) null frequency case: result is polygone area
@@ -335,7 +338,7 @@ class petal_FT(polyFT):
     number of points per half petal border, and profile type
     '''
 
-    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos', **kwargs):
+    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos', Gamma=None, **kwargs):
 
         '''
         Initializes petal_FT class, derived from poly_FT.
@@ -372,7 +375,9 @@ class petal_FT(polyFT):
         self.profile = self.create_profile()
 
 
-        Gamma = self.petal_coordinates()
+        if (Gamma is None):
+            Gamma = self.petal_coordinates()
+                
         super().__init__(Gamma, **kwargs)
 
     def create_profile(self):
