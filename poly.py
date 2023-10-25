@@ -4,13 +4,13 @@
 ### which in numpy language is written (B*C).sum(-1)
 
 
-# try:
-#     import cupy as cp
-#     import numpy as np
-#     cuda_on = True
-# except:
-import numpy as np
-cuda_on = False
+try:
+    import cupy as cp
+    import numpy as np
+    cuda_on = True
+except:
+    import numpy as np
+    cuda_on = False
 
 # Essai !!
 # cuda_on = False

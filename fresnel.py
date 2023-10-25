@@ -85,7 +85,7 @@ class diffraction:
 
     def compute_diffraction_patterns(self):
 
-        self.diffracted = np.zeros((self.m,self.m,self.phase_filter.lambdaRange.size))
+        self.diffracted = np.zeros((self.m,self.m,self.phase_filter.lambdaRange.size),dtype='complex128')
         if (cuda_on):
             print ('Cuda is on !')
             xp = cp
