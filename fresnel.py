@@ -14,7 +14,7 @@ class phasefilter:
  
         self.p = petal
         self.m = m
-        self.L = petal.r_max # Notations...
+        self.L = petal.L
         self.phase_step = 2.0*self.L/self.m
         self.phase_axis = np.fft.fftshift(np.fft.fftfreq(self.m,d=1./(2.*self.L)))
         self.Z = float(self.p.occ['Z'])
@@ -65,7 +65,7 @@ class diffraction:
         self.petal = petal
         self.petal.set_the_scene(self.embed_factor,self.margin)
         self.phase_filter = phasefilter(self.petal,m=self.m)
-        self.W = compute_W_array(m, step=2.*self.petal.r_max/self.m)
+        self.W = compute_W_array(m, step=2.*self.petal.L/self.m)
         return
 
     def compute_polygonal_fmask(self):
@@ -99,7 +99,7 @@ class diffraction:
             if (cuda_on):
                 fresnel_filter = cp.asarray(self.fresnel_filter[:,:,i])
             else:
-                fresnel_filter = self.fresnel_filter
+                fresnel_filter = self.fresnel_filter[:,:,i]
             diffracted = 1.0 - xp.fft.fftshift(
                                                 xp.fft.ifft2(
                                                     xp.fft.ifftshift(
@@ -115,12 +115,12 @@ class diffraction:
 
     def compute_extent(self, upper=True):
 
-        r_max = self.petal.r_max
-        pixel_size = 2.*r_max / self.m
+        L = self.petal.L
+        pixel_size = 2.*L / self.m
         if upper:
-            extent = (-r_max-pixel_size/2., r_max-pixel_size/2.,r_max-pixel_size/2., -r_max-pixel_size/2. )
+            extent = (-L-pixel_size/2., L-pixel_size/2.,L-pixel_size/2., -L-pixel_size/2. )
         else:
-            extent = (-r_max-pixel_size/2., r_max-pixel_size/2.,-r_max-pixel_size/2., r_max-pixel_size/2. )
+            extent = (-L-pixel_size/2., L-pixel_size/2.,-L-pixel_size/2., L-pixel_size/2. )
         return (extent)
 
 

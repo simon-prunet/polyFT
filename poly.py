@@ -3,6 +3,11 @@
 ### is obtained in the following way: a_{ii} = \sum_j b_{ij} c^T_{ji} = \sum_j b_{ij} c_{ij}
 ### which in numpy language is written (B*C).sum(-1)
 
+# BEWARE
+# All things related to the radial profile use r_last (last defined point in SISTER profile), 
+# including contour samples for polygonal transform.
+# BUT all pixel/frequency axes use r_out = occulterDiameter/2
+
 
 try:
     import cupy as cp
@@ -218,9 +223,8 @@ class disk_FT (polyFT):
         '''
         self.n_pixels = n_pixels
         self.n_pad = n_pad
-        self.r_max = self.n_pad * self.R
-        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
-        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
+        self.L = self.n_pad * self.R
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
         x, y = np.meshgrid(arr,arr)
         rxy = np.sqrt(x**2+y**2)
         mask = np.zeros((self.n_pixels,self.n_pixels))
@@ -237,11 +241,11 @@ class disk_FT (polyFT):
             print ('Call pixelized_mask method first.')
             return
 
-        pixel_size = 2.*self.r_max / self.n_pixels
+        pixel_size = 2.*self.L / self.n_pixels
         if upper:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,self.L-pixel_size/2., -self.L-pixel_size/2. )
         else:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,-self.L-pixel_size/2., self.L-pixel_size/2. )
         return (extent)
 
     def pixelized_FT(self,n_pixels=2048, n_pad=2, return_W=True):
@@ -249,9 +253,9 @@ class disk_FT (polyFT):
         mask = self.pixelized_disk(n_pixels,n_pad)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
         # Normalize: divide by number of pixels, multiply by surface of image
-        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
+        fmask /= self.n_pixels**2 / (2.*self.L)**2
         if (return_W):
-            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
+            W = compute_W_array(n_pixels,step=2.*self.L/n_pixels)
             return (W, fmask)
         else:
             return (fmask)
@@ -353,7 +357,7 @@ class petal_FT(polyFT):
         self.profile_type = profile_type
         self.n_pixels = None
         self.n_pad = None
-        self.r_max = None
+        self.L = None
 
         if (self.profile_type=='sister'):
             if ('profile_path' not in kwargs.keys()):
@@ -368,9 +372,13 @@ class petal_FT(polyFT):
             self.occ['r'] = np.array(self.occ['r'].squeeze())
             self.occ['Profile'] = np.array(self.occ['Profile'].squeeze())
             #
-            self.r_out = self.occ['r'][-1] # Last defined value of sampled SISTER profile
+            # Need to differentiate between r_last and r_out for SISTER profile...
+            self.r_last = self.occ['r'][-1] # Last defined value of sampled SISTER profile
+            self.r_out = float(self.occ['occulterDiameter']/2.)
             self.r_in  = self.r_out - float(self.occ['petalLength'])
             self.n_petals = int(self.occ['numPetals'])
+        else:
+            self.r_last = self.r_out # No SISTER nonsense for other profiles
 
         self.profile = self.create_profile()
 
@@ -424,7 +432,8 @@ class petal_FT(polyFT):
         Makes sure singular points of the border are included
         '''
         eps = 1e-10
-        r = np.linspace(self.r_out+eps,self.r_in,self.n_border)
+        # Here we use r_last for the radius of the outer singular points of the polygonal shape 
+        r = np.linspace(self.r_last+eps,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
         r = np.concatenate((np.flip(r)[1:-1],r))
@@ -445,12 +454,12 @@ class petal_FT(polyFT):
 
     def set_the_scene(self, embed_factor=4, margin=0.01):
         '''
-        Compute r_max (L in Claude's notations)
+        Compute L (Claude's notations)
         '''
         self.embed_factor = embed_factor
         self.margin = margin
         self.n_pad = self.embed_factor*(1.0 + self.margin)
-        self.r_max = self.n_pad  * self.r_out # L for Claude
+        self.L = self.n_pad  * self.r_out # L for Claude
 
         return
 
@@ -461,17 +470,15 @@ class petal_FT(polyFT):
         '''
         self.n_pixels = n_pixels # N in Claude's notations
         self.set_the_scene(embed_factor=embed_factor,margin=margin)
-        self.step = 2.*self.r_max / self.n_pixels
-        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
-        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
+        self.step = 2.*self.L / self.n_pixels
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
         x, y = np.meshgrid(arr,arr)
         rxy = np.sqrt(x**2+y**2)
         angxy = np.arctan2(y,x)
         Num = self.n_petals
         pxy = self.profile(rxy)
-        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>=self.r_out)
+        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>=self.r_last) # r_last, not r_out
         if (inverted):
-            # return x
             return (1.0-neg)
         else:
             return(neg)
@@ -482,15 +489,15 @@ class petal_FT(polyFT):
         To be used in imshow routine with the "extent" keyword.
         upper=True gives the bounding box for origin='upper' in imshow
         '''
-        if (self.r_max is None or self.n_pixels is None):
+        if (self.L is None or self.n_pixels is None):
             print ('Call pixelized_mask method first.')
             return
 
-        pixel_size = 2.*self.r_max / self.n_pixels
+        pixel_size = 2.*self.L / self.n_pixels
         if upper:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,self.L-pixel_size/2., -self.L-pixel_size/2. )
         else:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,-self.L-pixel_size/2., self.L-pixel_size/2. )
         return (extent)
 
     def pixelized_FT(self,n_pixels=2048, embed_factor=4, margin=0.01, inverted=True, return_W=True):
@@ -501,9 +508,9 @@ class petal_FT(polyFT):
         '''
         mask = self.pixelized_mask(n_pixels,embed_factor,margin,inverted)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
-        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
+        fmask /= self.n_pixels**2 / (2.*self.L)**2
         if (return_W):
-            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
+            W = compute_W_array(n_pixels,step=2.*self.L/n_pixels)
             return (W, fmask)
         else:
             return (fmask)
