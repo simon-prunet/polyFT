@@ -83,17 +83,22 @@ class diffraction:
         self.fresnel_filter = self.phase_filter()
         return
 
-    def compute_diffraction_patterns(self):
+    def compute_diffraction_patterns(self,fmask=None):
 
         self.diffracted = np.zeros((self.m,self.m,self.phase_filter.lambdaRange.size),dtype='complex128')
+        if (fmask is not None):
+            fmask = fmask
+        else:
+            fmask = self.polygonal_fmask
+
         if (cuda_on):
             print ('Cuda is on !')
             xp = cp
-            polygonal_fmask = cp.asarray(self.polygonal_fmask)
+            fmask = cp.asarray(fmask)
             diffracted = cp.zeros((self.m,self.m),dtype='complex128')
         else:
             xp = np
-            polygonal_fmask = self.polygonal_fmask
+            fmask = fmask
             diffracted = np.zeros((self.m,self.m),dtype='complex128')
         for i in range(self.phase_filter.lambdaRange.size):
             if (cuda_on):
@@ -103,7 +108,7 @@ class diffraction:
             diffracted = 1.0 - xp.fft.fftshift(
                                                 xp.fft.ifft2(
                                                     xp.fft.ifftshift(
-                                                        fresnel_filter*polygonal_fmask
+                                                        fresnel_filter*fmask
                                                     )
                                                 )
                                               )
