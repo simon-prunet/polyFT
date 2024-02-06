@@ -434,12 +434,13 @@ class petal_FT(polyFT):
             return (sister)
 
 
-    def petal_coordinates(self, inverse_curvature=False):
+    def petal_coordinates(self, inverse_curvature=False, eps=1e-10):
         '''
         Computes coordinates of polygon summits on the petal borders.
         Makes sure singular points of the border are included
+        eps is there to make sure last defined point is taken into account for SISTER profile
         '''
-        eps = 1e-10
+        
         # Here we use r_last for the radius of the outer singular points of the polygonal shape 
         r = np.linspace(self.r_last+eps,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
