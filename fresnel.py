@@ -21,7 +21,7 @@ class phasefilter:
         self.lambdaRange = self.p.occ['lambdaRange'].squeeze()
         return
 
-    def __call__(self, return_coords=False):
+    def __call__(self,analytical=False):
 
         if (cuda_on):
             xp = cp
@@ -29,25 +29,31 @@ class phasefilter:
         else:
             xp = np
             phase_axis = self.phase_axis
-        X,Y = xp.meshgrid(phase_axis,phase_axis)
-        phase = xp.zeros_like(X,dtype='complex128')
-        filt = np.zeros((X.shape[0],X.shape[1],self.lambdaRange.size),dtype='complex128')
-        for i in range(self.lambdaRange.size):
-            phase = -1j / (self.lambdaRange[i]*self.Z)*xp.exp(1j*xp.pi*(X**2+Y**2)/(self.lambdaRange[i]*self.Z))
-            tmp = xp.fft.ifftshift(phase)
-            tmp = xp.fft.fft2(tmp)
-            tmp = xp.fft.fftshift(tmp)
-            if (cuda_on):
-                filt[:,:,i] = cp.asnumpy(tmp)
-            else:
-                filt[:,:,i] = tmp
-        if (cuda_on and return_coords):
-            X = cp.asnumpy(X)
-            Y = cp.asnumpy(Y)
-        if (return_coords):
-            return (X,Y,filt)
-        else:
-            return (filt)
+        if (not analytical):
+            X,Y = xp.meshgrid(phase_axis,phase_axis)
+            phase = xp.zeros_like(X,dtype='complex128')
+            filt = np.zeros((X.shape[0],X.shape[1],self.lambdaRange.size),dtype='complex128')
+            for i in range(self.lambdaRange.size):
+                phase = -1j / (self.lambdaRange[i]*self.Z)*xp.exp(1j*xp.pi*(X**2+Y**2)/(self.lambdaRange[i]*self.Z))
+                tmp = xp.fft.ifftshift(phase)
+                tmp = xp.fft.fft2(tmp)
+                tmp = xp.fft.fftshift(tmp)
+                if (cuda_on):
+                    filt[:,:,i] = cp.asnumpy(tmp)
+                else:
+                    filt[:,:,i] = tmp
+        else: # Use continuous, analytical Fourier tranform of Fresnel phase
+            f = xp.fft.fftshift(xp.fft.fftfreq(self.m,d=self.phase_step))
+            fxx,fyy = xp.meshgrid(f,f)
+            # Use analytical formula
+            filt = np.zeros((self.m,self.m,self.lambdaRange.size),dtype='complex128')
+            for i in range(self.lambdaRange.size):
+                phase = xp.exp(1j*xp.pi*self.lambdaRange[i]*self.Z*(fxx**2+fyy**2))
+                if (cuda_on):
+                    filt[:,:,i] = cp.asnumpy(phase)
+                else:
+                    filt[:,:,i] = phase
+        return (filt)
 
 
 class diffraction:
@@ -79,8 +85,8 @@ class diffraction:
         ## from the discrete mask Fourier transform
         ## Call poly.pixelized_FT() 
 
-    def compute_fresnel_filter(self):
-        self.fresnel_filter = self.phase_filter()
+    def compute_fresnel_filter(self,analytical=False):
+        self.fresnel_filter = self.phase_filter(analytical=analytical)
         return
 
     def compute_diffraction_patterns(self,fmask=None):

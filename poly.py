@@ -73,6 +73,14 @@ class polyFT:
 
         return
 
+    def area (self):
+        '''
+        Computes polygonal area (zero-frequency term of Fourier transform)
+        '''
+        Gamma = self.Gamma
+        res = 0.5 * np.sum(-np.roll(rot(Gamma),1,axis=0)*Gamma) # \sum [\hat{n},V_{j-1},V_{j}]
+        return (res)
+    
     def process (self,w):
         
         '''
