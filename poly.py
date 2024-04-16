@@ -3,22 +3,45 @@
 ### is obtained in the following way: a_{ii} = \sum_j b_{ij} c^T_{ji} = \sum_j b_{ij} c_{ij}
 ### which in numpy language is written (B*C).sum(-1)
 
+# BEWARE
+# All things related to the radial profile use r_last (last defined point in SISTER profile), 
+# including contour samples for polygonal transform.
+# BUT all pixel/frequency axes use r_out = occulterDiameter/2
+
 
 try:
-    import cupy as np
+    import cupy as cp
+    import numpy as np
+    cuda_on = True
 except:
     import numpy as np
+    cuda_on = False
+
+# Essai !!
+# cuda_on = False
 
 import scipy as sp
 import os
 from scipy.io import loadmat
 
+def get_array_module(arr):
+    '''
+    if cuda is available, and arr is a cupy array, returns cupy, otherwise returns numpy
+    '''
+    if (cuda_on):
+        xp = cp.get_array_module(arr)
+    else:
+        xp = np
+    return(xp)
+
+
 def rot(arr):
-    return np.vstack((-arr[:,1],arr[:,0])).T
+    xp = get_array_module(arr)
+    return xp.vstack((-arr[:,1],arr[:,0])).T
 
 class polyFT:
     
-    def __init__(self, Gamma, sinc_formula=True):
+    def __init__(self, Gamma, sinc_formula=True, **kwargs):
 
         '''
         Initializes the polygonal Fourier Transform class.
@@ -50,7 +73,15 @@ class polyFT:
 
         return
 
-    def __call__(self,W):
+    def area (self):
+        '''
+        Computes polygonal area (zero-frequency term of Fourier transform)
+        '''
+        Gamma = self.Gamma
+        res = 0.5 * np.sum(-np.roll(rot(Gamma),1,axis=0)*Gamma) # \sum [\hat{n},V_{j-1},V_{j}]
+        return (res)
+    
+    def process (self,w):
         
         '''
         Computes Fourier transform of indicatrix function of polygonal shape,
@@ -60,21 +91,76 @@ class polyFT:
         # Beware that W are wave vectors in the paper, but are assumed to be spatial frequencies here,
         # to allow direct comparisons to FFT computations, hence the 2pi factors in denominator and phase.
         # Note that this is purely conventional.
+        # If W is a cupy array, computations will be done on GPU and the result will be a cupy array
+        
+        xp = get_array_module(w)
+        Gamma = xp.asarray(self.Gamma)
 
         if self.sinc_formula is True:
-            phase = np.exp(2j*np.pi*np.dot(W,self.Rj.T))
-            Wx = rot(W)
-            num_weight = np.sinc(2.*np.dot(W,self.Ej.T)) * np.dot(Wx,self.Ej.T) /(np.linalg.norm(W,axis=1)**2)[:,None] / (1j*np.pi)
-            result = (-phase * num_weight).sum(-1)
+            Rj = xp.asarray(self.Rj)
+            Ej = xp.asarray(self.Ej)
+            wx = rot(w)
+
+            # print('After allocating Ej', cp._default_memory_pool.used_bytes())
+
+            num_weight = xp.exp(2j*xp.pi*xp.dot(w,Rj.T)) #phase term
+            # print('After allocating phase', cp._default_memory_pool.used_bytes())
+            num_weight *= xp.sinc(2.*xp.dot(w,Ej.T)) # sinc term
+            num_weight *= np.dot(wx,Ej.T) # geometric term
+            
+            # print('After computing num_weight', cp._default_memory_pool.used_bytes())
+
+            result = -num_weight.sum(-1) / xp.linalg.norm(w,axis=1)**2 / (1j*xp.pi) # 1/q^2 term
             # Take care of W=(0,0) null frequency case: result is polygone area
-            result[np.linalg.norm(W,axis=1)==0] = 0.5 * np.sum(-np.roll(rot(self.Gamma),1,axis=0)*self.Gamma)
+            result[xp.linalg.norm(w,axis=1)==0] = 0.5 * xp.sum(-xp.roll(rot(Gamma),1,axis=0)*Gamma)
             return (result)
         else: 
             # old formula
-            den_weight = np.dot(W,self.Alpha.T) * np.dot(W,self.Alpha_m1.T) * (2.*np.pi)**2
-            phase = np.exp(2j*np.pi*np.dot(W,self.Gamma.T))
-            return (phase * self.num_weight[None,:]/den_weight).sum(-1)
+            Alpha = xp.asarray(self.Alpha)
+            Alpha_m1 = xp.asarray(self.Alpha_m1)
+            num_weight = xp.asarray(self.num_weight)
 
+            den_weight = xp.dot(w,Alpha.T) 
+            den_weight *= xp.dot(w,Alpha_m1.T) * (2.*xp.pi)**2
+            weight = xp.exp(2j*xp.pi*xp.dot(w,Gamma.T))/den_weight
+            return (num_weight[None,:]*weight).sum(-1)
+
+    def __call__ (self,W,cpu_memory_limit=50,gpu_memory_limit=10):
+
+        '''
+        Call the process function in a loop to avoid memory overload, 
+        especially when computing on GPU.
+        cpu and gpu memory limits are expressed in GigaBytes.
+        '''
+
+        cpu_limit = cpu_memory_limit * 1024**3
+        gpu_limit = gpu_memory_limit * 1024**3
+        # Memory allocation will be dominated by the different dot (tensor) products
+        # There are three of them of size W.shape[0]*Gamma.shape[0]*sizeof(complex128)
+        nw = W.shape[0]
+        npo = self.npoints
+        if (cuda_on):
+            nslices = 3* nw*npo*16 // gpu_limit +1 # Complex numbers, double precision
+        else:
+            nslices = 3* nw*npo*16 // cpu_limit +1
+
+        print ('nslices = ',nslices)
+
+        res = np.zeros(nw,dtype=np.complex128)
+        indices = np.array_split(np.arange(nw),nslices)
+        for i in range(nslices):
+            print ('Processing slice number %d out of %d'%(i,nslices))
+            if (cuda_on):
+                wi = cp.asarray(W[indices[i],:])
+                print ('shape of wi is ',wi.shape)
+                print(cp._default_memory_pool.used_bytes())
+                resi = self.process(wi)
+                res[indices[i]] = cp.asnumpy(resi)
+                del wi, resi # Clean GPU memory
+            else:
+                wi = W[indices[i],:]
+                res[indices[i]] = self.process(wi)
+        return (res)
 
 class square_FT(polyFT):
     '''
@@ -145,9 +231,8 @@ class disk_FT (polyFT):
         '''
         self.n_pixels = n_pixels
         self.n_pad = n_pad
-        self.r_max = self.n_pad * self.R
-        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
-        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
+        self.L = self.n_pad * self.R
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
         x, y = np.meshgrid(arr,arr)
         rxy = np.sqrt(x**2+y**2)
         mask = np.zeros((self.n_pixels,self.n_pixels))
@@ -164,11 +249,11 @@ class disk_FT (polyFT):
             print ('Call pixelized_mask method first.')
             return
 
-        pixel_size = 2.*self.r_max / self.n_pixels
+        pixel_size = 2.*self.L / self.n_pixels
         if upper:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,self.L-pixel_size/2., -self.L-pixel_size/2. )
         else:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,-self.L-pixel_size/2., self.L-pixel_size/2. )
         return (extent)
 
     def pixelized_FT(self,n_pixels=2048, n_pad=2, return_W=True):
@@ -176,9 +261,9 @@ class disk_FT (polyFT):
         mask = self.pixelized_disk(n_pixels,n_pad)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
         # Normalize: divide by number of pixels, multiply by surface of image
-        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
+        fmask /= self.n_pixels**2 / (2.*self.L)**2
         if (return_W):
-            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
+            W = compute_W_array(n_pixels,step=2.*self.L/n_pixels)
             return (W, fmask)
         else:
             return (fmask)
@@ -265,7 +350,7 @@ class petal_FT(polyFT):
     number of points per half petal border, and profile type
     '''
 
-    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos', **kwargs):
+    def __init__(self, r_in = 1, r_out=2, n_petals=8, n_border = 100, profile_type='arch_cos', Gamma=None, **kwargs):
 
         '''
         Initializes petal_FT class, derived from poly_FT.
@@ -280,7 +365,7 @@ class petal_FT(polyFT):
         self.profile_type = profile_type
         self.n_pixels = None
         self.n_pad = None
-        self.r_max = None
+        self.L = None
 
         if (self.profile_type=='sister'):
             if ('profile_path' not in kwargs.keys()):
@@ -295,15 +380,21 @@ class petal_FT(polyFT):
             self.occ['r'] = np.array(self.occ['r'].squeeze())
             self.occ['Profile'] = np.array(self.occ['Profile'].squeeze())
             #
-            self.r_out = self.occ['r'][-1] # Last defined value of sampled SISTER profile
+            # Need to differentiate between r_last and r_out for SISTER profile...
+            self.r_last = self.occ['r'][-1] # Last defined value of sampled SISTER profile
+            self.r_out = float(self.occ['occulterDiameter']/2.)
             self.r_in  = self.r_out - float(self.occ['petalLength'])
             self.n_petals = int(self.occ['numPetals'])
+        else:
+            self.r_last = self.r_out # No SISTER nonsense for other profiles
 
         self.profile = self.create_profile()
 
 
-        Gamma = self.petal_coordinates()
-        super().__init__(Gamma)
+        if (Gamma is None):
+            Gamma = self.petal_coordinates()
+                
+        super().__init__(Gamma, **kwargs)
 
     def create_profile(self):
         if self.profile_type=='arch_cos':
@@ -343,13 +434,15 @@ class petal_FT(polyFT):
             return (sister)
 
 
-    def petal_coordinates(self, inverse_curvature=False):
+    def petal_coordinates(self, inverse_curvature=False, eps=1e-10):
         '''
         Computes coordinates of polygon summits on the petal borders.
         Makes sure singular points of the border are included
+        eps is there to make sure last defined point is taken into account for SISTER profile
         '''
-        eps = 1e-10
-        r = np.linspace(self.r_out+eps,self.r_in,self.n_border)
+        
+        # Here we use r_last for the radius of the outer singular points of the polygonal shape 
+        r = np.linspace(self.r_last+eps,self.r_in,self.n_border)
         theta = self.profile(r) * np.pi / self.n_petals
 
         r = np.concatenate((np.flip(r)[1:-1],r))
@@ -370,12 +463,12 @@ class petal_FT(polyFT):
 
     def set_the_scene(self, embed_factor=4, margin=0.01):
         '''
-        Compute r_max (L in Claude's notations)
+        Compute L (Claude's notations)
         '''
         self.embed_factor = embed_factor
         self.margin = margin
         self.n_pad = self.embed_factor*(1.0 + self.margin)
-        self.r_max = self.n_pad  * self.r_out # L for Claude
+        self.L = self.n_pad  * self.r_out # L for Claude
 
         return
 
@@ -386,17 +479,15 @@ class petal_FT(polyFT):
         '''
         self.n_pixels = n_pixels # N in Claude's notations
         self.set_the_scene(embed_factor=embed_factor,margin=margin)
-        self.step = 2.*self.r_max / self.n_pixels
-        # arr = np.linspace(-self.r_max,self.r_max,self.n_pixels)
-        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.r_max))
+        self.step = 2.*self.L / self.n_pixels
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
         x, y = np.meshgrid(arr,arr)
         rxy = np.sqrt(x**2+y**2)
         angxy = np.arctan2(y,x)
         Num = self.n_petals
         pxy = self.profile(rxy)
-        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>=self.r_out)
+        neg=(Num*np.abs(np.mod(angxy+np.pi/Num,2*np.pi/Num)-np.pi/Num)/np.pi>pxy) + (rxy>=self.r_last) # r_last, not r_out
         if (inverted):
-            # return x
             return (1.0-neg)
         else:
             return(neg)
@@ -407,15 +498,15 @@ class petal_FT(polyFT):
         To be used in imshow routine with the "extent" keyword.
         upper=True gives the bounding box for origin='upper' in imshow
         '''
-        if (self.r_max is None or self.n_pixels is None):
+        if (self.L is None or self.n_pixels is None):
             print ('Call pixelized_mask method first.')
             return
 
-        pixel_size = 2.*self.r_max / self.n_pixels
+        pixel_size = 2.*self.L / self.n_pixels
         if upper:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,self.r_max-pixel_size/2., -self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,self.L-pixel_size/2., -self.L-pixel_size/2. )
         else:
-            extent = (-self.r_max-pixel_size/2., self.r_max-pixel_size/2.,-self.r_max-pixel_size/2., self.r_max-pixel_size/2. )
+            extent = (-self.L-pixel_size/2., self.L-pixel_size/2.,-self.L-pixel_size/2., self.L-pixel_size/2. )
         return (extent)
 
     def pixelized_FT(self,n_pixels=2048, embed_factor=4, margin=0.01, inverted=True, return_W=True):
@@ -426,9 +517,9 @@ class petal_FT(polyFT):
         '''
         mask = self.pixelized_mask(n_pixels,embed_factor,margin,inverted)
         fmask = np.fft.fftshift(np.fft.fft2(mask))
-        fmask /= self.n_pixels**2 / (2.*self.r_max)**2
+        fmask /= self.n_pixels**2 / (2.*self.L)**2
         if (return_W):
-            W = compute_W_array(n_pixels,step=2.*self.r_max/n_pixels)
+            W = compute_W_array(n_pixels,step=2.*self.L/n_pixels)
             return (W, fmask)
         else:
             return (fmask)
