@@ -12,3 +12,4 @@ Care is taken to control the memory footprint at a basic level.
 
 These transforms have been used in the context of Fresnel diffraction by binary masks, with polygones of up to ~1M vertices.
 
+See the file doit.py as an example of how to use the different classes, and in which order.
