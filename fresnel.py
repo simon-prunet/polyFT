@@ -74,8 +74,8 @@ class diffraction:
         self.W = compute_W_array(m, step=2.*self.petal.L/self.m)
         return
 
-    def compute_polygonal_fmask(self):
-        self.polygonal_fmask = self.petal(self.W).reshape((self.m,self.m))
+    def compute_polygonal_fmask(self,**kwargs):
+        self.polygonal_fmask = self.petal(self.W,**kwargs).reshape((self.m,self.m))
         return
     
     # def compute_discrete_fmask(self):
