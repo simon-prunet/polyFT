@@ -385,8 +385,24 @@ class petal_FT(polyFT):
             self.r_out = float(self.occ['occulterDiameter']/2.)
             self.r_in  = self.r_out - float(self.occ['petalLength'])
             self.n_petals = int(self.occ['numPetals'])
+        elif (self.profile_type=='trapeze'):
+            if ('profile_path' not in kwargs.keys()):
+                print('For a TRAPEZE profile, needs MATLAB path to create the profile')
+                return
+            self.profile_path = kwargs['profile_path']
+            if (not os.path.exists(self.profile_path)):
+                print('TRAPEZE profile path %s does not exist'%self.profile_path)
+                return
+            self.occ = loadmat(self.profile_path)
+            self.r_in = float(self.occ['RayMinOc'])
+            self.r_out = float(self.occ['RayMaxOc'])
+            self.r_last = self.r_out # only different for SISTER profile
+            self.alphas = self.occ['alpha'].squeeze()
+            self.n_trapeze = int(self.occ['Nbre_Trapez'])
+            self.n_pupil = int(self.occ['NptsPup'])
+            self.positions = np.linspace(self.r_in,self.r_out,self.n_trapeze+1)
         else:
-            self.r_last = self.r_out # No SISTER nonsense for other profiles
+            self.r_last = self.r_out # Only different for SISTER profile
 
         self.profile = self.create_profile()
 
@@ -432,7 +448,22 @@ class petal_FT(polyFT):
                     res = np.interp(np.array(r),np.array(self.occ['r']),np.array(self.occ['Profile']),right=0.0)
                 return(res)
             return (sister)
+        if self.profile_type=='trapeze':
 
+            def trapeze_profile(r):
+                '''
+                Function that computes the weighted sum of trapeze 
+                '''
+                # Now compute profile values at self.positions.
+                # Note that at self.r_min, profile values is \sum\alpha=1, at self.positions[-2]: \alpha[-1], at self.r_max: 0                
+                # 
+                self.sampled_profile = np.zeros(self.n_trapeze+1)
+                self.sampled_profile[:-1] = np.dot(np.triu(np.ones((self.n_trapeze,self.n_trapeze))), self.alphas)
+                # Make sure that first value is exactly 1 (at r_min)
+                self.sampled_profile[0] = 1.0
+                res = np.interp(np.array(r),self.positions,self.sampled_profile, left=1.0, right=0.0)
+                return(res)
+            return (trapeze_profile)
 
     def petal_coordinates(self, inverse_curvature=False, eps=1e-10):
         '''
