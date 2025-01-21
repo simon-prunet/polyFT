@@ -18,7 +18,7 @@ class phasefilter:
         self.phase_step = 2.0*self.L/self.m
         self.phase_axis = np.fft.fftshift(np.fft.fftfreq(self.m,d=1./(2.*self.L)))
         self.Z = float(self.p.occ['Z'])
-        self.lambdaRange = self.p.occ['lambdaRange'].squeeze()
+        self.lambdaRange = self.p.occ['lambdaRange'][0,:]
         return
 
     def __call__(self,analytical=False):
