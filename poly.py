@@ -428,10 +428,11 @@ class petal_FT(polyFT):
             self.r_in = 10.0
             self.r_out = 25.0
             self.r_last = self.r_out # only different for SISTER profile
-            self.sampled_profile = self.occ['ProfileApprox'].squeeze()
+            self.sampled_profile = self.occ['profil'].squeeze()
             self.n_points = self.sampled_profile.size
             # Beware ! Profile starts at r=0...
-            self.positions = np.linspace(0.0,self.r_out,self.n_points)
+            # self.positions = np.linspace(0.0,self.r_out,self.n_points)
+            self.positions = self.occ['axeR'].squeeze()
         else:
             self.r_last = self.r_out # Only different for SISTER profile
 
