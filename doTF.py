@@ -1,15 +1,16 @@
-from poly import *
+#from poly import *
+from polygon_fourier import *
 from fresnel import diffraction
 import numpy as np
 from timer import Timer
 
 # Create NW2 profile
-n = 8000
+n = 100 # 8000
 print('Creating petal with %d points'%(n*2*24))
 p = petal_FT(n_border=n,profile_type='sister',profile_path='Matlab_files/NW2.mat')
 
 # Create diffraction instance
-m = 2**10
+m = 2**8 # 2**10
 diff = diffraction(p,m)
 
 t = Timer()
