@@ -307,6 +307,22 @@ class Petal(PixelizedMaskMixin, Polygon):
             # Make sure that first value is exactly 1 (at r_min)
             self.sampled_profile[0] = 1.0
 
+        elif (self.profile_type=='linearly_interpolated'):
+            self.profile_path = self._get_profile_path(kwargs, 'LINEARLY_INTERPOLATED')
+            self.occ = loadmat(self.profile_path)
+            # Add these parameters by hand for now... Should be included in the .mat file
+            self.occ['Z'] = np.array([[80000000]]) # 80000 km
+            self.occ['lambdaRange'] = np.array([[0.65e-6]])
+        
+            self.r_in = 10.0
+            self.r_out = 25.0
+            self.r_last = self.r_out # only different for SISTER profile
+            self.sampled_profile = self.occ['profil'].squeeze()
+            self.n_points = self.sampled_profile.size
+            # Beware ! Profile starts at r=0...
+            # self.positions = np.linspace(0.0,self.r_out,self.n_points)
+            self.positions = self.occ['axeR'].squeeze()
+            
         elif (self.profile_type=='serrated'):
             self.n_border = 2*self.n_petals
             self.r_last = self.r_out
@@ -385,6 +401,17 @@ class Petal(PixelizedMaskMixin, Polygon):
                 res = np.interp(np.array(r),self.positions,self.sampled_profile, left=1.0, right=0.0)
                 return(res)
             return (trapeze_profile)
+
+        if self.profile_type=='linearly_interpolated':
+
+            def piecewise_linear_profile(r):
+                '''
+                Function that linearly interpolates sampled profile
+                '''
+                res = np.interp(np.array(r),self.positions,self.sampled_profile, right=0.0)
+                return(res)
+            return (piecewise_linear_profile)
+
         raise ValueError('No profile function for profile_type %r' % self.profile_type)
 
     def petal_coordinates_from_profile(self, inverse_curvature=False, eps=1e-10):
