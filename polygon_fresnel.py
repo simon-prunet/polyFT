@@ -94,20 +94,49 @@ class FresnelMixin:
             
         return res
 
-    ############################################################################
-    # Helper functions for Fresnel integrals
+############################################################################
+# Helper functions for Fresnel integrals
+############################################################################
 
-    def compute_P_array(n=1024,dims=2,size=1.0):
-        '''
-        computes 2D coordinates of pupil samples as a list of 2D vectors.
-        For dims=1, computes a regular sampling of the y=0 line.
-        For dims=2, computes a regular sampling of the pupil plane.
-        '''
-        f = np.linspace(-size/2.0,size/2.0,n)
-        if (dims==1):
-            P = np.vstack((f,np.zeros_like(f))).T
-            return(P)
-        else:
-            fxx,fyy = np.meshgrid(f,f)
-            P = np.vstack((fxx.flatten(),fyy.flatten())).T
+def compute_P_array(n=1024,dims=2,size=1.0):
+    '''
+    computes 2D coordinates of pupil samples as a list of 2D vectors.
+    For dims=1, computes a regular sampling of the y=0 line.
+    For dims=2, computes a regular sampling of the pupil plane.
+    '''
+    f = np.linspace(-size/2.0,size/2.0,n)
+    if (dims==1):
+        P = np.vstack((f,np.zeros_like(f))).T
         return(P)
+    else:
+        fxx,fyy = np.meshgrid(f,f)
+        P = np.vstack((fxx.flatten(),fyy.flatten())).T
+    return(P)
+
+############################################################################
+# Mixin class for Fresnel diffraction of polygonal apertures
+############################################################################
+class PolygonFresnel(FresnelMixin, Polygon):
+    '''
+    Fresnel diffraction of an arbitrary polygonal mask.
+    Takes as input the 2D coordinates of the polygone summits.
+    '''
+
+    def __init__(self, Gamma, sinc_formula=True):
+        super().__init__(Gamma, sinc_formula=sinc_formula)
+
+class SquareFresnel(FresnelMixin, Square):
+    '''
+    Fresnel diffraction of a square mask.
+    Takes as input the size of the square.
+    '''
+
+    def __init__(self, c):
+        super().__init__(c)
+
+    def square_transform(self, P):
+        '''
+        Computes the Fresnel diffraction pattern of a square mask at the points P in the observation plane.
+        P : array of points in the observation plane where the diffraction pattern is computed.
+        '''
+        return self.process(P, 0)  # Use the first wavelength in lambdaRange
