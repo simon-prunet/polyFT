@@ -194,7 +194,7 @@ class PixelizedMaskMixin:
 # Specific shapes
 # ---------------------------------------------------------------------------
 
-class Square(Polygon):
+class Square(PixelizedMaskMixin, Polygon):
     '''
     Square mask. Initialization takes half size c as input
     '''
@@ -206,6 +206,34 @@ class Square(Polygon):
     def square_coordinates(self,c):
         arr = np.array(([c,c],[c,-c],[-c,-c],[-c,c]))
         return(arr)
+
+    def set_the_scene(self, embed_factor=4, margin=0.01):
+        '''
+        Compute L (Claude's notations)
+        '''
+        self.embed_factor = embed_factor
+        self.margin = margin
+        self.n_pad = self.embed_factor*(1.0 + self.margin)
+        self.L = self.n_pad  * self.c * np.sqrt(2) # L for Claude
+
+        return
+
+    def pixelized_mask(self, n_pixels=2048, embed_factor=4, margin=0.01, inverted=True):
+        '''
+        Create digitized pixel mask or size n_pixels x n_pixels,
+        of physical linear size r_max * n_pad
+        '''
+        self.n_pixels = n_pixels # N in Claude's notations
+        self.set_the_scene(embed_factor=embed_factor,margin=margin)
+        self.step = 2.*self.L / self.n_pixels
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
+        x, y = np.meshgrid(arr,arr)
+        neg = (np.abs(x)>self.c) + (np.abs(y)>self.c)
+        if (inverted):
+            return (1.0-neg)
+        else:
+            return(neg)
+
 
 
 class Hexagon(Polygon):

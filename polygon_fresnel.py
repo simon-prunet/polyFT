@@ -18,11 +18,11 @@ class FresnelMixin:
     Computations are done on the boundary, as in Maggi-Rubinowicz theory.
     '''
 
-    def __init__(self, lambdas = np.array([650e-9]), Z = 1., *args, **kwargs):
+    def __init__(self, *args, lambdas = np.array([650e-9]), Z = 1., **kwargs):
         super().__init__(*args, **kwargs)
         self.qj = self.Gamma  # Vertices of the polygon
-        self.nj = self.normals()  # Normals to the edges of the polygon
-        self.tj = self.tangents()  # Tangents to the edges of the polygon
+        self.nj = self.normals  # Normals to the edges of the polygon
+        self.tj = self.tangents  # Tangents to the edges of the polygon
         if hasattr(self, 'occ'):
             if hasattr(self.occ, 'lambdaRange'):
                 self.lambdaRange = self.occ.lambdaRange
@@ -48,6 +48,7 @@ class FresnelMixin:
         pp = xp.asarray(p)  # Points in the observation plane
         lengths = xp.asarray(self.lengths)  # Lengths of the edges of the polygon
 
+        ## This does not have the right dimensions !!! Needs to be fixed
         N = xp.dot(self.qj[None,:,:] - pp[:,None,:], self.nj.T) * np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z)
         T = xp.dot(self.qj[None,:,:] - pp[:,None,:], self.tj.T) * np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z)
         Tp = T + np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z) * lengths[None,:]  # T plus edge lengths
@@ -98,13 +99,13 @@ class FresnelMixin:
 # Helper functions for Fresnel integrals
 ############################################################################
 
-def compute_P_array(n=1024,dims=2,size=1.0):
+def compute_P_array(n=1024,dims=2,step=1.0):
     '''
     computes 2D coordinates of pupil samples as a list of 2D vectors.
     For dims=1, computes a regular sampling of the y=0 line.
     For dims=2, computes a regular sampling of the pupil plane.
     '''
-    f = np.linspace(-size/2.0,size/2.0,n)
+    f = np.fft.fftshift(np.fft.fftfreq(n,d=step))
     if (dims==1):
         P = np.vstack((f,np.zeros_like(f))).T
         return(P)
@@ -130,9 +131,6 @@ class SquareFresnel(FresnelMixin, Square):
     Fresnel diffraction of a square mask.
     Takes as input the size of the square.
     '''
-
-    def __init__(self, c):
-        super().__init__(c)
 
     def square_transform(self, P):
         '''
