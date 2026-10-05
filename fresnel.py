@@ -7,19 +7,25 @@ class phasefilter:
     This class computes 2D Fourier transform
     of quadratic phase (Fresnel approximation)
     '''
-    def __init__(self, petal, m=2**13):
+    def __init__(self, petal, m=None, Z=None, lambdaRange=None):
 
-        if (not isinstance(petal,petal_FT)):
+        if (not isinstance(petal,(petal_FT,square_FT))):
             print('argument must be an instance of the petalFT class')
             return None
  
         self.p = petal
+        if m is None:
+            raise ValueError('m must be provided for phasefilter')
         self.m = m
         self.L = petal.L
         self.phase_step = 2.0*self.L/self.m
         self.phase_axis = np.fft.fftshift(np.fft.fftfreq(self.m,d=1./(2.*self.L)))
-        self.Z = float(self.p.occ['Z'])
-        self.lambdaRange = self.p.occ['lambdaRange'][0,:]
+        if Z is None:
+            raise ValueError('Z must be provided for phasefilter')
+        self.Z = Z
+        if lambdaRange is None:
+            raise ValueError('lambdaRange must be provided for phasefilter')
+        self.lambdaRange = lambdaRange
         return
 
     def __call__(self,analytical=False):
@@ -64,15 +70,34 @@ class diffraction:
     all wavelengths
     '''
 
-    def __init__(self,petal,m=2**13, embed_factor=4, margin=0.01):
+    def __init__(self,petal,m=2**13, embed_factor=4, margin=0.01, Z=None, lambdaRange=None):
 
+        if (not isinstance(petal,(petal_FT, square_FT))):
+            print('argument must be an instance of the petalFT class')
+            return None
+        
         self.m = m
         self.embed_factor=embed_factor
         self.margin=margin
         self.petal = petal
         self.petal.set_the_scene(self.embed_factor,self.margin)
-        self.phase_filter = phasefilter(self.petal,m=self.m)
         self.W = compute_W_array(m, step=2.*self.petal.L/self.m)
+        if (Z is None and isinstance(self.petal,petal_FT)):
+            self.Z = float(self.petal.occ['Z'])
+        elif (Z is not None):
+            self.Z = Z
+        else:
+            raise ValueError('Z must be provided for non-petal_FT instances')
+        
+        if (lambdaRange is None and isinstance(self.petal,petal_FT)):
+            self.lambdaRange = self.petal.occ['lambdaRange'][0,:]
+        elif (lambdaRange is not None):
+            self.lambdaRange = lambdaRange
+        else:
+            raise ValueError('lambdaRange must be provided for non-petal_FT instances')
+
+        self.phase_filter = phasefilter(self.petal,self.m, self.Z, self.lambdaRange)
+
         return
 
     def compute_polygonal_fmask(self,**kwargs):

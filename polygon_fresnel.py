@@ -67,9 +67,9 @@ class FresnelMixin:
         cpu_limit = cpu_memory_limit * 1024**3
         gpu_limit = gpu_memory_limit * 1024**3
         if  (cuda_on):
-            nslices = npupils * self.npoints * self.order * 10 // gpu_limit + 1
+            nslices = npupil * self.npoints * self.order * 10 // gpu_limit + 1
         else:
-            nslices = npupils * self.npoints * self.order * 10 // cpu_limit + 1
+            nslices = npupil * self.npoints * self.order * 10 // cpu_limit + 1
 
         if verbose:
             print ('nslices = ',nslices)
