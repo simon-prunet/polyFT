@@ -93,6 +93,7 @@ def Phi_batch(x, gamma, order=_ORDER):
     x = xp.asarray(x, dtype=float)
     gamma = xp.asarray(gamma, dtype=float)
     gamma = xp.broadcast_to(gamma, x.shape)
+    print('x.shape, gamma.shape',x.shape, gamma.shape)
     return _phi_batch(x, gamma, order, xp)
 
 

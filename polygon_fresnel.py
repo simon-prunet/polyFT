@@ -20,9 +20,11 @@ class FresnelMixin:
 
     def __init__(self, *args, lambdas = np.array([650e-9]), Z = 1., **kwargs):
         super().__init__(*args, **kwargs)
-        self.qj = self.Gamma  # Vertices of the polygon
-        self.nj = self.normals  # Normals to the edges of the polygon
-        self.tj = self.tangents  # Tangents to the edges of the polygon
+        self.qj = xp.asarray(self.Gamma)  # Vertices of the polygon
+        self.nj = xp.asarray(self.normals)  # Normals to the edges of the polygon
+        self.tj = xp.asarray(self.tangents)  # Tangents to the edges of the polygon
+        self.lj = xp.asarray(self.lengths)  # Lengths of the edges of the polygon
+
         if hasattr(self, 'occ'):
             if hasattr(self.occ, 'lambdaRange'):
                 self.lambdaRange = self.occ.lambdaRange
@@ -34,29 +36,35 @@ class FresnelMixin:
         else:
             self.Z = Z  # Default propagation distance
 
-    def process(self, p, i_lambda):
+    def process(self, p, j, i_lambda):
         '''
             This method computes the Fresnel diffraction pattern for the polygonal aperture defined by the vertices qj, normals nj, and tangents tj. 
             The computation is performed using the Fresnel integrals along the edges of the polygon.
             p : array of points in the observation plane where the diffraction pattern is computed.
+            j : index of the edge for which the computation is performed.
             i_lambda : index of the wavelength in self.lambdaRange for which the computation is performed.
         '''
-        # Create arrays (qj-p).tj, (qj-p).nj
-
-        qj = xp.asarray(self.qj)  # Vertices of the polygon
-        tj = xp.asarray(self.tj)  # Tangents to the edges of the polygon
-        pp = xp.asarray(p)  # Points in the observation plane
-        lengths = xp.asarray(self.lengths)  # Lengths of the edges of the polygon
 
         ## This does not have the right dimensions !!! Needs to be fixed
-        N = xp.dot(self.qj[None,:,:] - pp[:,None,:], self.nj.T) * np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z)
-        T = xp.dot(self.qj[None,:,:] - pp[:,None,:], self.tj.T) * np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z)
-        Tp = T + np.sqrt(np.pi / self.lambdaRange[i_lambda] / self.Z) * lengths[None,:]  # T plus edge lengths
+        qj = self.qj[j]  # Vertex of the j-th edge
+        nj = self.nj[j]  # Normal to the j-th edge
+        tj = self.tj[j]  # Tangent to the j-th edge
+        lj = self.lj[j]  # Length of the j-th edge
+        print('qj, nj,tj,lj',qj, nj,tj,lj)
 
-        res = N * np.exp(1j * N**2) * occulter_edge_integral_batch(T, Tp, xp.abs(N))  # Compute the Fresnel integral along the edges
-        return(res.sum(axis=1))  # Sum over edges to get the total field at each point p
+        lammda = self.lambdaRange[i_lambda]  # Wavelength for the computation
+        z = self.Z  # Propagation distance
+    
+        N = xp.dot(qj[None,:] - p[:,:], nj) * xp.sqrt(xp.pi / lammda / z) 
+        T = xp.dot(qj[None,:] - p[:,:], tj) * np.sqrt(np.pi / lammda / z)
+        Tp = T + xp.sqrt(xp.pi / lammda / z) * lj  # T plus edge lengths
+        print('N,T,Tp',N.shape,T.shape,Tp.shape)
 
-    def __call__(self, P, cpu_memory_limit=50,gpu_memory_limit=10,verbose=True):
+
+        res = N * np.exp(1j * N**2) * occulter_edge_integral_batch(T, Tp, xp.abs(N)) / (2.*np.pi) # Compute the Fresnel integral along the edges
+        return(res)
+
+    def __call__(self, P, verbose=True):
         '''
             This method computes the Fresnel diffraction pattern for the polygonal aperture at the points P in the observation plane.
             P : array of points in the observation plane where the diffraction pattern is computed.
@@ -64,48 +72,35 @@ class FresnelMixin:
         
         npupil = P.shape[0]
         res = xp.zeros((npupil, self.lambdaRange.size), dtype='complex128')
-        cpu_limit = cpu_memory_limit * 1024**3
-        gpu_limit = gpu_memory_limit * 1024**3
-        if  (cuda_on):
-            nslices = npupil * self.npoints * self.order * 10 // gpu_limit + 1
-        else:
-            nslices = npupil * self.npoints * self.order * 10 // cpu_limit + 1
-
-        if verbose:
-            print ('nslices = ',nslices)
-
-        res = np.zeros((npupil, self.lambdaRange.size), dtype=np.complex128)
-        indices = np.array_split(np.arange(npupil),nslices)
+        p = xp.asarray(P)
 
         for i_lambda in range(self.lambdaRange.size):
-            for i in range(nslices):
+            for j in range(self.npoints):
                 if verbose:
-                    print ('Processing slice number %d out of %d'%(i,nslices))
+                    print ('Processing edge number %d out of %d'%(j+1,self.npoints))
                 if (cuda_on):
-                    p = xp.asarray(P[indices[i],:])
                     if verbose:
                         print ('shape of p is ',p.shape)
                         print(xp._default_memory_pool.used_bytes())
-                    resi = self.process(p, i_lambda)
-                    res[indices[i], i_lambda] = xp.asnumpy(resi)
-                    del p, resi # Clean GPU memory
+                    resi = self.process(p, j, i_lambda)
+                    res[:, i_lambda] += xp.asnumpy(resi) # Add contributions from all edges for the current wavelength
+                    del resi # Clean GPU memory
                 else:
-                    p = P[indices[i],:]
-                    res[indices[i], i_lambda] = self.process(p, i_lambda)
-            
+                    res[:, i_lambda] += self.process(p, j, i_lambda)
+
         return res
 
 ############################################################################
 # Helper functions for Fresnel integrals
 ############################################################################
 
-def compute_P_array(n=1024,dims=2,step=1.0):
+def compute_P_array(m=2**12,dims=2,step=1.0):
     '''
     computes 2D coordinates of pupil samples as a list of 2D vectors.
     For dims=1, computes a regular sampling of the y=0 line.
     For dims=2, computes a regular sampling of the pupil plane.
     '''
-    f = np.fft.fftshift(np.fft.fftfreq(n,d=step))
+    f = np.fft.fftshift(np.fft.fftfreq(m,d=step))
     if (dims==1):
         P = np.vstack((f,np.zeros_like(f))).T
         return(P)
