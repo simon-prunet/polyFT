@@ -71,7 +71,7 @@ class FresnelMixin:
         '''
         
         npupil = P.shape[0]
-        res = xp.zeros((npupil, self.lambdaRange.size), dtype='complex128')
+        res = np.zeros((npupil, self.lambdaRange.size), dtype='complex128')
         p = xp.asarray(P)
 
         for i_lambda in range(self.lambdaRange.size):
