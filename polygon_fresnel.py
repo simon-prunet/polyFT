@@ -1,7 +1,8 @@
 from polygon import (np, cp, cuda_on, get_array_module, rot,
                      Polygon, Square, Hexagon, Disk, Petal)
 
-from psi_gpu import (occulter_edge_integral_batch)
+#from psi_gpu import (occulter_edge_integral_batch)
+from occulter_gpu import (occulter_edge_integral)
 
 try:
     import cupy as xp
@@ -36,7 +37,7 @@ class FresnelMixin:
         else:
             self.Z = Z  # Default propagation distance
 
-    def process(self, p, j, i_lambda):
+    def process(self, p, j, i_lambda, order=48):
         '''
             This method computes the Fresnel diffraction pattern for the polygonal aperture defined by the vertices qj, normals nj, and tangents tj. 
             The computation is performed using the Fresnel integrals along the edges of the polygon.
@@ -61,10 +62,10 @@ class FresnelMixin:
         print('N,T,Tp',N.shape,T.shape,Tp.shape)
 
 
-        res = N * np.exp(1j * N**2) * occulter_edge_integral_batch(T, Tp, xp.abs(N)) / (2.*np.pi) # Compute the Fresnel integral along the edges
+        res = N * np.exp(1j * N**2) * occulter_edge_integral(T, Tp, xp.abs(N), order=order) / (2.*np.pi) # Compute the Fresnel integral along the edges
         return(res)
 
-    def __call__(self, P, verbose=True):
+    def __call__(self, P, verbose=True, order=48):
         '''
             This method computes the Fresnel diffraction pattern for the polygonal aperture at the points P in the observation plane.
             P : array of points in the observation plane where the diffraction pattern is computed.
@@ -82,7 +83,7 @@ class FresnelMixin:
                     if verbose:
                         print ('shape of p is ',p.shape)
                         print(xp._default_memory_pool.used_bytes())
-                    resi = self.process(p, j, i_lambda)
+                    resi = self.process(p, j, i_lambda, order=order)
                     res[:, i_lambda] += xp.asnumpy(resi) # Add contributions from all edges for the current wavelength
                     del resi # Clean GPU memory
                 else:
