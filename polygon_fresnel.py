@@ -4,6 +4,8 @@ from polygon import (np, cp, cuda_on, get_array_module, rot,
 #from psi_gpu import (occulter_edge_integral_batch)
 from occulter_gpu import (occulter_edge_integral)
 
+from scipy.special import erfc 
+
 try:
     import cupy as xp
     cuda_on = True
@@ -132,5 +134,19 @@ class SquareFresnel(FresnelMixin, Square):
         '''
         Computes the Fresnel diffraction pattern of a square mask at the points P in the observation plane.
         P : array of points in the observation plane where the diffraction pattern is computed.
+        Uses the analytical formula for the Fresnel diffraction of a square aperture.
         '''
-        return self.process(P, 0)  # Use the first wavelength in lambdaRange
+        x = P[:,0]
+        y = P[:,1]
+        npupil = P.shape[0]
+        res = np.zeros((npupil, self.lambdaRange.size), dtype='complex128')
+        c = self.c
+        z = self.Z
+        for i_lambda in range(self.lambdaRange.size):
+            lammda = self.lambdaRange[i_lambda]
+            k = 2*np.pi/lammda
+            d = np.sqrt(2*z*1j/k)
+            res[:, i_lambda] = 1. - (erfc((x + c)/d) - erfc((x - c)/d)) * (erfc((y + c)/d) - erfc((y - c)/d)) / 4.0
+
+        return res
+    
