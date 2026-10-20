@@ -1,5 +1,5 @@
 from polygon import (np, cp, cuda_on, get_array_module, rot,
-                     Polygon, Square, Hexagon, Disk, Petal)
+                     Polygon, Square, SerratedPolygon, Hexagon, Disk, Petal)
 
 #from psi_gpu import (occulter_edge_integral_batch)
 from occulter_gpu import (occulter_edge_integral)
@@ -53,7 +53,7 @@ class FresnelMixin:
         nj = self.nj[j]  # Normal to the j-th edge
         tj = self.tj[j]  # Tangent to the j-th edge
         lj = self.lj[j]  # Length of the j-th edge
-        print('qj, nj,tj,lj',qj, nj,tj,lj)
+        #print('qj, nj,tj,lj',qj, nj,tj,lj)
 
         lammda = self.lambdaRange[i_lambda]  # Wavelength for the computation
         z = self.Z  # Propagation distance
@@ -61,7 +61,7 @@ class FresnelMixin:
         N = xp.dot(qj[None,:] - p[:,:], nj) * xp.sqrt(xp.pi / lammda / z) 
         T = xp.dot(qj[None,:] - p[:,:], tj) * np.sqrt(np.pi / lammda / z)
         Tp = T + xp.sqrt(xp.pi / lammda / z) * lj  # T plus edge lengths
-        print('N,T,Tp',N.shape,T.shape,Tp.shape)
+        #print('N,T,Tp',N.shape,T.shape,Tp.shape)
 
 
         res = N * np.exp(1j * N**2) * occulter_edge_integral(T, Tp, xp.abs(N), order=order) / (2.*np.pi) # Compute the Fresnel integral along the edges
@@ -80,11 +80,11 @@ class FresnelMixin:
         for i_lambda in range(self.lambdaRange.size):
             for j in range(self.npoints):
                 if verbose:
-                    print ('Processing edge number %d out of %d'%(j+1,self.npoints))
+                    print ('Processing edge number %d out of %d'%(j+1,self.npoints), end="\r")
                 if (cuda_on):
-                    if verbose:
-                        print ('shape of p is ',p.shape)
-                        print(xp._default_memory_pool.used_bytes())
+                    #if verbose:
+                    #    print ('shape of p is ',p.shape)
+                    #    print(xp._default_memory_pool.used_bytes())
                     resi = self.process(p, j, i_lambda, order=order)
                     res[:, i_lambda] += xp.asnumpy(resi) # Add contributions from all edges for the current wavelength
                     del resi # Clean GPU memory
@@ -149,4 +149,9 @@ class SquareFresnel(FresnelMixin, Square):
             res[:, i_lambda] = 1. - (erfc((x + c)/d) - erfc((x - c)/d)) * (erfc((y + c)/d) - erfc((y - c)/d)) / 4.0
 
         return res
-    
+
+class SerratedFresnel(FresnelMixin, SerratedPolygon):
+    '''
+    Fresnel diffraction of a serrated mask.
+    Takes as input the size of the serrated mask and the number of petals.
+    '''

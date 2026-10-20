@@ -193,6 +193,85 @@ class PixelizedMaskMixin:
 # ---------------------------------------------------------------------------
 # Specific shapes
 # ---------------------------------------------------------------------------
+class SerratedPolygon(PixelizedMaskMixin, Polygon):
+    '''
+    Serrated polygon mask. Initialization takes inner radius, outer radius, number of petals
+    '''
+
+    def __init__(self, r_in = 0.71, r_out=0.76, n_petals=2048):
+        self.r_in = r_in
+        self.r_out = r_out
+        self.n_petals = n_petals
+        self.n_border = 2*self.n_petals
+        Gamma = self.serrated_coordinates()
+        super().__init__(Gamma)
+
+    def serrated_coordinates(self):
+        '''
+        Computes coordinates of polygon summits on the serrated petal borders.
+        '''
+        r = np.array([self.r_out, self.r_in])
+        theta = np.array([0., np.pi/self.n_petals])
+
+        rr = r.copy()
+        ttheta = theta.copy()
+
+        for i in range(1,self.n_petals):
+            rr = np.concatenate((rr,r))
+            ttheta = np.concatenate((ttheta,theta + i*2.*np.pi/self.n_petals))
+
+        # Put in clockwise order (counterclockwise as seen along +z)
+        ttheta = np.flip(ttheta)
+        rr = np.flip(rr)
+
+        return (np.vstack((rr*np.cos(ttheta), rr*np.sin(ttheta))).T)
+
+    def set_the_scene(self, embed_factor=4, margin=0.01):
+        '''
+        Compute L (Claude's notations)
+        '''
+        self.embed_factor = embed_factor
+        self.margin = margin
+        self.n_pad = self.embed_factor*(1.0 + self.margin)
+        self.L = self.n_pad  * self.r_out # L for Claude
+
+        return
+    
+    def pixelized_mask(self, n_pixels=4096, embed_factor=4, margin=0.01, inverted=True):
+        '''
+        Create digitized pixel mask or size n_pixels x n_pixels,
+        of physical linear size r_max * n_pad
+        '''
+        def rot(a):
+            # Clockwise rotation on the 2D last axis coordinates
+            b = np.zeros_like(a)
+            b[...,0] = a[...,1]
+            b[...,1] = -a[...,0]
+            return(b)
+        
+        self.n_pixels = n_pixels # N in Claude's notations
+        self.set_the_scene(embed_factor=embed_factor,margin=margin)
+        self.step = 2.*self.L / self.n_pixels
+        arr = np.fft.fftfreq(self.n_pixels,d=1./(2.*self.L))
+        x, y = np.meshgrid(arr,arr)
+        rxy = np.sqrt(x**2+y**2)
+        pin = np.pi / self.n_petals
+
+        neg = np.zeros((self.n_pixels,self.n_pixels))
+        neg[rxy<self.r_in] = 0.0
+        neg[rxy>=self.r_out] = 1.0
+        angxy = np.arctan2(x,y)
+        mangxy = np.mod(angxy+pin,2*pin)-pin
+        # Current radius (for -pi/n <= theta < pi/n)
+        ctbeta = (self.r_out - self.r_in*np.cos(pin))/(self.r_in*np.sin(pin))
+        r_of_theta = self.r_out/(np.cos(mangxy) + np.abs(np.sin(mangxy))*ctbeta)
+        
+        neg [(rxy >= self.r_in) * (rxy<self.r_out) * (rxy >= r_of_theta)] = 1.
+        #neg = angxy
+        if (inverted):
+            return (1.0-neg)
+        else:
+            return(neg)
 
 class Square(PixelizedMaskMixin, Polygon):
     '''
@@ -218,7 +297,7 @@ class Square(PixelizedMaskMixin, Polygon):
 
         return
 
-    def pixelized_mask(self, n_pixels=2048, embed_factor=4, margin=0.01, inverted=True):
+    def pixelized_mask(self, n_pixels=4096, embed_factor=4, margin=0.01, inverted=True):
         '''
         Create digitized pixel mask or size n_pixels x n_pixels,
         of physical linear size r_max * n_pad
