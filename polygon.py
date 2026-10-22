@@ -260,7 +260,7 @@ class SerratedPolygon(PixelizedMaskMixin, Polygon):
         neg = np.zeros((self.n_pixels,self.n_pixels))
         neg[rxy<self.r_in] = 0.0
         neg[rxy>=self.r_out] = 1.0
-        angxy = np.arctan2(x,y)
+        angxy = np.arctan2(y,x)
         mangxy = np.mod(angxy+pin,2*pin)-pin
         # Current radius (for -pi/n <= theta < pi/n)
         ctbeta = (self.r_out - self.r_in*np.cos(pin))/(self.r_in*np.sin(pin))
@@ -272,6 +272,22 @@ class SerratedPolygon(PixelizedMaskMixin, Polygon):
             return (1.0-neg)
         else:
             return(neg)
+
+    def is_outside_of_mask(self, P):
+        '''
+        This function returns an array of size P.shape[0], with elements equal to one for points
+        of P outside of the serrated mask, and zero otherwise
+        '''
+        pin = np.pi/self.n_petals
+        r = np.linalg.norm(P,axis=1)
+        theta = np.arctan2(P[...,1],P[...,0])
+        mtheta = np.mod(theta+pin,2*pin)-pin
+        ctbeta = (self.r_out - self.r_in*np.cos(pin))/(self.r_in*np.sin(pin))
+        r_of_theta = self.r_out/(np.cos(mtheta) + np.abs(np.sin(mtheta))*ctbeta)
+        neg = np.zeros(P.shape[:-1],dtype=int)
+        neg[(r>=self.r_out)] = 1
+        neg[(r >= self.r_in) * (r < self.r_out) * (r >= r_of_theta)] = 1
+        return(neg)
 
 class Square(PixelizedMaskMixin, Polygon):
     '''
