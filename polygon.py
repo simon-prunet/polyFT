@@ -284,9 +284,9 @@ class SerratedPolygon(PixelizedMaskMixin, Polygon):
         mtheta = np.mod(theta+pin,2*pin)-pin
         ctbeta = (self.r_out - self.r_in*np.cos(pin))/(self.r_in*np.sin(pin))
         r_of_theta = self.r_out/(np.cos(mtheta) + np.abs(np.sin(mtheta))*ctbeta)
-        neg = np.zeros(P.shape[:-1],dtype=int)
-        neg[(r>=self.r_out)] = 1
-        neg[(r >= self.r_in) * (r < self.r_out) * (r >= r_of_theta)] = 1
+        neg = np.zeros(P.shape[:-1],dtype=bool)
+        neg[(r>=self.r_out)] = True
+        neg[(r >= self.r_in) * (r < self.r_out) * (r >= r_of_theta)] = True
         return(neg)
 
 class Square(PixelizedMaskMixin, Polygon):

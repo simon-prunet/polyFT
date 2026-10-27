@@ -64,7 +64,7 @@ class FresnelMixin:
         #print('N,T,Tp',N.shape,T.shape,Tp.shape)
 
 
-        res = N * np.exp(1j * N**2) * occulter_edge_integral(T, Tp, xp.abs(N), order=order) / (2.*np.pi) # Compute the Fresnel integral along the edges
+        res = N * xp.exp(1j * N**2) * occulter_edge_integral(T, Tp, xp.abs(N), order=order) / (2.*xp.pi) # Compute the Fresnel integral along the edges
         return(res)
 
     def __call__(self, P, verbose=True, order=48):
