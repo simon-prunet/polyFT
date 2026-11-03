@@ -112,6 +112,14 @@ def compute_P_array(m=2**12,dims=2,step=1.0):
         P = np.vstack((fxx.flatten(),fyy.flatten())).T
     return(P)
 
+def compute_Claude_array():
+    '''
+    Computes a radius with 10000001 points for ASPIICS
+    '''
+    arr = np.linspace(0,1,10000001)
+    arr = np.vstack((arr,np.zeros_like(arr))).T
+    return(arr)
+
 ############################################################################
 # Mixin class for Fresnel diffraction of polygonal apertures
 ############################################################################
