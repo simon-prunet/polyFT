@@ -3,15 +3,17 @@
 
 import numpy as np
 from polygon_fresnel import *
-
+if cuda_on:
+    # Choose last GPU on the server
+    cp.cuda.Device(2).use()
 # Parameters ####
 dims = 1
 m = 2**19
 r_in = 0.71 # metres
 r_out = 0.76 #metres
-Z = 144 # metres
+Z = 144.348 # metres
 ll = np.array([550e-9]) # metres
-n_petals = 2048
+n_petals = 8192
 
 # Create serrated Fresnel structure ####
 s = SerratedFresnel(Z=Z, lambdas=ll, n_petals=n_petals,r_in=r_in,r_out=r_out); 
